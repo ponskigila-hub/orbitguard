@@ -1,0 +1,32 @@
+"""
+OGB — OrbitalGuard
+Pydantic models for AI Copilot chat.
+"""
+from __future__ import annotations
+
+from typing import List, Optional
+from pydantic import BaseModel, Field
+
+
+class CopilotMessage(BaseModel):
+    role: str = Field(..., pattern="^(user|assistant|system)$")
+    content: str
+
+
+class CopilotRequest(BaseModel):
+    """
+    Operator sends a question plus structured context (detection JSON,
+    orbital JSON, risk JSON).  The copilot must never receive raw images
+    or TLEs — only structured outputs from the vision and orbital pipelines.
+    """
+    message: str
+    history: List[CopilotMessage] = []
+    detection_context: Optional[dict] = None   # DetectionResponse dict
+    orbital_context: Optional[dict] = None     # OrbitalState dict (V2+)
+    risk_context: Optional[dict] = None        # RiskAssessment dict (V2+)
+
+
+class CopilotResponse(BaseModel):
+    reply: str
+    provider: str
+    model: str
