@@ -1,0 +1,57 @@
+# OGB — OrbitalGuard
+# Dataset, model weights, and generated artefacts must never be committed.
+
+# ── Dataset ──────────────────────────────────────────────────────────────────
+data/
+
+# ── Model weights ─────────────────────────────────────────────────────────────
+ml/weights/
+ml/runs/
+*.pt
+*.pth
+*.onnx
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+env/
+.venv-ogb/
+
+# ── Environment / secrets ──────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Node / Next.js ────────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+frontend/dist/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editors ───────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Logs / temporaries ────────────────────────────────────────────────────────
+*.log
+*.tmp
+*.bak
