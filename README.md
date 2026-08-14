@@ -287,11 +287,65 @@ IBM Bob (the AI software engineer in this repo's IDE) contributed the following 
 
 ## Deployment
 
-_(To be completed — targeting free-tier public deployment)_
+### Live URLs
 
-- Backend: Railway / Render / Fly.io (free tier)
-- Frontend: Vercel (free tier)
-- Model weights: bundled or fetched at startup from a release asset
+| Service | URL |
+|---|---|
+| **Frontend** | _(deploy to Vercel — see steps below)_ |
+| **Backend** | _(deploy to Render — see steps below)_ |
+
+> ⚠️ **Cold-start warning:** Render's free tier spins down after 15 minutes of inactivity. The first request after an idle period takes **30–60 seconds** (Python startup + YOLOv8n model load). Hit `GET /api/v1/health` before your demo to pre-warm it. Paid Render/Railway tiers or Fly.io machines eliminate this entirely.
+
+---
+
+### Deploy the Backend (Render free tier)
+
+1. Push this repo to GitHub.
+2. Go to [render.com](https://render.com) → **New → Web Service** → connect your repo.
+3. Render auto-detects `render.yaml` at the repo root and pre-fills all settings.
+4. In the Render dashboard **Environment** tab, add:
+   - `GEMINI_API_KEY` → your Google AI Studio key
+   - `ALLOWED_ORIGINS` → your Vercel frontend URL (add after step below; you can update it)
+5. Click **Deploy**.
+6. Note the service URL, e.g. `https://ogb-backend.onrender.com`.
+
+**Smoke-test the deployed backend:**
+```bash
+curl https://ogb-backend.onrender.com/api/v1/health
+# → {"status":"ok"}
+```
+
+---
+
+### Deploy the Frontend (Vercel free tier)
+
+1. Go to [vercel.com](https://vercel.com) → **New Project** → import your GitHub repo.
+2. Set the **Root Directory** to `frontend`.
+3. In **Environment Variables**, add:
+   - `NEXT_PUBLIC_API_URL` → `https://ogb-backend.onrender.com` (your Render URL)
+4. Click **Deploy**.
+5. Note your Vercel URL, e.g. `https://ogb.vercel.app`.
+
+**Update backend CORS** — go back to Render, update `ALLOWED_ORIGINS` to your Vercel URL, and redeploy:
+```
+ALLOWED_ORIGINS=https://ogb.vercel.app,https://ogb-git-main-youruser.vercel.app
+```
+
+---
+
+### Local development (unchanged)
+
+```bash
+# Backend
+cd backend
+uvicorn app.main:app --reload --port 8000
+
+# Frontend (separate terminal)
+cd frontend
+npm run dev
+```
+
+No `ALLOWED_ORIGINS` needed locally — the backend defaults to `localhost:3000/3001`.
 
 ---
 

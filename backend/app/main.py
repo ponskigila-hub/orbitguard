@@ -2,6 +2,7 @@
 OGB — OrbitalGuard
 FastAPI application entry point.
 """
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -20,13 +21,26 @@ app = FastAPI(
     ),
 )
 
-# CORS — restrict in production; open for local development
+# CORS — read allowed origins from env; defaults to localhost for local dev.
+# In production set ALLOWED_ORIGINS to the deployed Vercel URL, e.g.:
+#   ALLOWED_ORIGINS=https://ogb.vercel.app,https://ogb-git-main-username.vercel.app
+_raw_origins = os.environ.get("ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS: list[str] = (
+    [o.strip() for o in _raw_origins.split(",") if o.strip()]
+    if _raw_origins
+    else [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+    ]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # tighten for production
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 app.include_router(api_router, prefix=API_V1_PREFIX)

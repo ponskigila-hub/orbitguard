@@ -1,7 +1,38 @@
 /**
  * OGB — OrbitalGuard
- * Shared TypeScript types for the detection API.
+ * Shared TypeScript types for the detection and copilot APIs.
  */
+
+// ---------------------------------------------------------------------------
+// Copilot
+// ---------------------------------------------------------------------------
+
+export interface CopilotMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+export interface CopilotRequest {
+  message: string;
+  history?: CopilotMessage[];
+  detection_context?: DetectionResponse;
+  orbital_context?: Record<string, unknown>; // V2+
+  risk_context?: Record<string, unknown>;    // V2+
+}
+
+export interface CopilotResponse {
+  reply: string;
+  provider: string;
+  model: string;
+}
+
+export type CopilotResult =
+  | { ok: true; data: CopilotResponse }
+  | { ok: false; status: number; message: string };
+
+// ---------------------------------------------------------------------------
+// Detection
+// ---------------------------------------------------------------------------
 
 export interface BoundingBox {
   x_center: number;

@@ -1,0 +1,22 @@
+# OGB Backend — Render deployment configuration
+# Free tier: 512 MB RAM, shared CPU, spins down after 15 min idle.
+# NOTE: First request after spin-down takes 30–60 s (model load + YOLO init).
+#       A /health ping can be used to pre-warm before a demo.
+
+services:
+  - type: web
+    name: ogb-backend
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    rootDir: backend
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false          # set manually in Render dashboard — never commit
+      - key: ALLOWED_ORIGINS
+        sync: false          # set to your Vercel frontend URL after first deploy
+      - key: PORT
+        value: "10000"
+    healthCheckPath: /api/v1/health
