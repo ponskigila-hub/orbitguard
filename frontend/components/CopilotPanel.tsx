@@ -6,13 +6,15 @@
  *  - Passes detection JSON as context on every message so answers are grounded.
  *  - Shows a banner when no detection has run yet (orbital fields N/A in MVP).
  *  - Displays backend errors (503, 500, network) visibly, not silently.
+ *  - Suggested question chips guide operators during live demos.
  */
 "use client";
 
 import { useState, useRef, useEffect, KeyboardEvent } from "react";
 import { Bot, Send, AlertTriangle, Loader } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { copilotChat } from "@/lib/api";
-import type { CopilotMessage, DetectionResponse } from "@/lib/types";
+import type { CopilotMessage, DetectionResponse, ToolCallRecord } from "@/lib/types";
 
 interface Props {
   detectionContext: DetectionResponse | null;
@@ -21,6 +23,7 @@ interface Props {
 interface DisplayMessage {
   role: "user" | "assistant" | "error";
   content: string;
+  toolCalls?: ToolCallRecord[];
 }
 
 const WELCOME: DisplayMessage = {
@@ -29,11 +32,28 @@ const WELCOME: DisplayMessage = {
     "OGB Copilot online. Upload and analyse an image to ground my responses in real detection data. I will not invent orbital data — if it is not in the detection output, I will say so.",
 };
 
+// Suggested questions shown as chips above the input.
+// Pre-detection chips are shown before any image is analysed.
+// Post-detection chips appear once a detection result is loaded.
+const SUGGESTED_PRE: string[] = [
+  "What can you detect?",
+  "How confident is the detector?",
+  "What happens after I upload an image?",
+];
+
+const SUGGESTED_POST: string[] = [
+  "What did you detect?",
+  "How confident are you?",
+  "What should I do next?",
+  "Tell me about this object class.",
+];
+
 export default function CopilotPanel({ detectionContext }: Props) {
   const [messages, setMessages] = useState<DisplayMessage[]>([WELCOME]);
   const [history, setHistory] = useState<CopilotMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [chipsUsed, setChipsUsed] = useState<Set<string>>(new Set());
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -64,6 +84,17 @@ export default function CopilotPanel({ detectionContext }: Props) {
     }
   }, [detectionContext]);
 
+  // Reset used chips when a new detection loads
+  useEffect(() => {
+    if (detectionContext) setChipsUsed(new Set());
+  }, [detectionContext]);
+
+  function useChip(question: string) {
+    setInput(question);
+    setChipsUsed((prev) => new Set(prev).add(question));
+    inputRef.current?.focus();
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || loading) return;
@@ -87,6 +118,7 @@ export default function CopilotPanel({ detectionContext }: Props) {
       const assistantMsg: DisplayMessage = {
         role: "assistant",
         content: result.data.reply,
+        toolCalls: result.data.tool_calls?.length ? result.data.tool_calls : undefined,
       };
       setMessages((prev) => [...prev, assistantMsg]);
       // Accumulate history for multi-turn context
@@ -140,7 +172,7 @@ export default function CopilotPanel({ detectionContext }: Props) {
       )}
 
       {/* ── Message history ─────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0 ogb-scrollbar">
         {messages.map((msg, i) => (
           <MessageBubble key={i} msg={msg} />
         ))}
@@ -164,6 +196,24 @@ export default function CopilotPanel({ detectionContext }: Props) {
 
       {/* ── Input ───────────────────────────────────────────────────────── */}
       <div className="flex-shrink-0 border-t border-[#2d3748] bg-[#0d1117] p-3">
+        {/* Suggested question chips */}
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {(detectionContext ? SUGGESTED_POST : SUGGESTED_PRE).map((q) => (
+            <button
+              key={q}
+              onClick={() => useChip(q)}
+              disabled={loading || chipsUsed.has(q)}
+              className={[
+                "px-2 py-1 rounded text-[10px] font-mono border transition-colors",
+                loading || chipsUsed.has(q)
+                  ? "border-[#1e2535] text-[#2d3748] cursor-not-allowed"
+                  : "border-[#2d4a7a] text-[#7aa2d4] hover:bg-[#1a2847] hover:text-[#c5d8f7] cursor-pointer",
+              ].join(" ")}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
         <div className="flex gap-2 items-end">
           <textarea
             ref={inputRef}
@@ -250,10 +300,72 @@ function MessageBubble({ msg }: { msg: DisplayMessage }) {
       <div className="w-6 h-6 rounded-full bg-[#161b27] border border-[#2d3748] flex items-center justify-center flex-shrink-0 mt-0.5">
         <Bot size={10} className="text-[#3b82f6]" />
       </div>
-      <div className="flex-1 px-3 py-2 rounded bg-[#161b27] border border-[#2d3748]">
-        <p className="text-[#e2e8f0] text-xs font-mono leading-relaxed whitespace-pre-wrap">
-          {msg.content}
-        </p>
+      <div className="flex-1 min-w-0">
+        {/* Tool-call badges — shown when this response used function-calling */}
+        {msg.toolCalls && msg.toolCalls.length > 0 && (
+          <div className="mb-1.5 space-y-1">
+            {msg.toolCalls.map((tc, i) => (
+              <ToolCallBadge key={i} tc={tc} />
+            ))}
+          </div>
+        )}
+        <div className="px-3 py-2 rounded bg-[#161b27] border border-[#2d3748]">
+          <div className="ogb-md text-[#e2e8f0] text-xs font-mono leading-relaxed">
+            <ReactMarkdown>{msg.content}</ReactMarkdown>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tool-call badge — shows what the risk engine returned
+// ---------------------------------------------------------------------------
+
+function ToolCallBadge({ tc }: { tc: ToolCallRecord }) {
+  const result = tc.result as Record<string, unknown>;
+  const isError = result.status === "ERROR" || result.status === "NOT_IMPLEMENTED";
+
+  return (
+    <div
+      className={[
+        "flex items-start gap-2 px-3 py-2 rounded border text-[10px] font-mono",
+        isError
+          ? "bg-[#1a0a00] border-[#7f3d00] text-[#f59e0b]"
+          : "bg-[#0a1a0d] border-[#1a4a2a] text-[#4ade80]",
+      ].join(" ")}
+    >
+      <span className="flex-shrink-0 mt-0.5">{isError ? "⚠️" : "🔧"}</span>
+      <div className="min-w-0">
+        <span className="text-[#6ee7b7] font-bold">{tc.tool_name}</span>
+        {!isError && typeof result.risk_score === "number" && (
+          <span className="ml-2">
+            score={" "}
+            <span className="text-white font-bold">
+              {(result.risk_score as number).toFixed(4)}
+            </span>
+            {" "}· category={" "}
+            <span
+              className={
+                result.risk_category === "CRITICAL"
+                  ? "text-red-400 font-bold"
+                  : result.risk_category === "HIGH"
+                  ? "text-orange-400 font-bold"
+                  : result.risk_category === "MEDIUM"
+                  ? "text-yellow-400 font-bold"
+                  : "text-green-400 font-bold"
+              }
+            >
+              {result.risk_category as string}
+            </span>
+          </span>
+        )}
+        {isError && (
+          <span className="ml-2 text-[#f59e0b]">
+            {(result.error as string) ?? "Tool unavailable"}
+          </span>
+        )}
       </div>
     </div>
   );

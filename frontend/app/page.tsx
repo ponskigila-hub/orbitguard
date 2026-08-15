@@ -96,7 +96,7 @@ export default function MvpPage() {
       {/* ── Main content ─────────────────────────────────────────────────── */}
       <main className="flex-1 max-w-screen-2xl w-full mx-auto px-6 py-6">
         {/* Two-column MVP layout: Camera Analysis | Copilot */}
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-6 h-full">
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-6 items-start">
 
           {/* ══ LEFT COLUMN: Camera Analysis ════════════════════════════════ */}
           <div className="flex flex-col gap-4 min-w-0">
@@ -199,9 +199,10 @@ export default function MvpPage() {
           </div>
 
           {/* ══ RIGHT COLUMN: AI Copilot ═════════════════════════════════════ */}
-          <div className="flex flex-col min-h-[500px] xl:min-h-0 xl:h-full">
+          {/* sticky so the panel stays in viewport while the left column scrolls */}
+          <div className="flex flex-col xl:sticky xl:top-6" style={{ height: "calc(100vh - 7rem)" }}>
             {/* Section header */}
-            <div className="mb-3">
+            <div className="mb-3 flex-shrink-0">
               <h2 className="font-mono text-sm font-bold text-[#e2e8f0] tracking-widest uppercase">
                 AI Copilot
               </h2>
@@ -209,7 +210,7 @@ export default function MvpPage() {
                 Ask questions grounded in detection data. No orbital data in MVP — Copilot will say so explicitly.
               </p>
             </div>
-            <div className="flex-1 min-h-[460px]">
+            <div className="flex-1 min-h-0">
               <CopilotPanel detectionContext={result} />
             </div>
           </div>

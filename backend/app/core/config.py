@@ -19,6 +19,9 @@ YOLO_CONFIDENCE_THRESHOLD = 0.25
 YOLO_IOU_THRESHOLD = 0.45
 YOLO_MAX_DETECTIONS = 100
 
+# Confidence below this value triggers a low-confidence advisory in the copilot.
+YOLO_LOW_CONFIDENCE_THRESHOLD = 0.50
+
 # 11 class names — exact order must match data.yaml (index = class_id)
 CLASS_NAMES = [
     "cheops",
@@ -33,6 +36,30 @@ CLASS_NAMES = [
     "soho",
     "xmm_newton",
 ]
+
+# Per-class mAP@50 from the completed 50-epoch Colab T4 GPU training run.
+# Source: ml/weights/metrics.json — do not edit without re-running evaluation.
+CLASS_MAP50: dict[str, float] = {
+    "cheops":                    0.924,
+    "debris":                    0.788,
+    "double_start":              0.965,
+    "earth_observation_sat_1":   0.812,
+    "lisa_pathfinder":           0.995,
+    "proba_2":                   0.755,
+    "proba_3_csc":               0.666,
+    "proba_3_ocs":               0.918,
+    "smart_1":                   0.825,
+    "soho":                      0.529,
+    "xmm_newton":                0.794,
+}
+
+# Model metadata surfaced to the copilot so it can answer capability questions.
+MODEL_VERSION = "ogb_yolov8n_v1"
+MODEL_DESCRIPTION = (
+    "YOLOv8n (nano) fine-tuned for 50 epochs on the Space Debris v2 dataset "
+    f"(11 space-object classes, 2,467 images). Overall mAP@50: 0.8156. "
+    "CPU inference target: ~140 ms mean latency."
+)
 
 # ---------------------------------------------------------------------------
 # Risk engine thresholds  (score range → category)

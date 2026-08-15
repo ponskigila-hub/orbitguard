@@ -20,10 +20,17 @@ export interface CopilotRequest {
   risk_context?: Record<string, unknown>;    // V2+
 }
 
+export interface ToolCallRecord {
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  result: Record<string, unknown>;
+}
+
 export interface CopilotResponse {
   reply: string;
   provider: string;
   model: string;
+  tool_calls: ToolCallRecord[];
 }
 
 export type CopilotResult =

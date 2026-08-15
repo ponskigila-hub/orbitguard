@@ -4,7 +4,7 @@ Pydantic models for AI Copilot chat.
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -26,7 +26,16 @@ class CopilotRequest(BaseModel):
     risk_context: Optional[dict] = None        # RiskAssessment dict (V2+)
 
 
+class ToolCallRecord(BaseModel):
+    """Record of a single function-calling tool invocation by the model."""
+    tool_name: str
+    arguments: Dict[str, Any]
+    result: Dict[str, Any]
+
+
 class CopilotResponse(BaseModel):
     reply: str
     provider: str
     model: str
+    # Non-empty when the model used function-calling to produce this answer
+    tool_calls: List[ToolCallRecord] = []
