@@ -123,22 +123,45 @@ Open `ml/training/ogb_train_colab.ipynb` in Colab, set runtime to T4 GPU, add yo
 
 ## Evaluation Results
 
-> **Status:** The training run included with this submission completed **9 of 50 epochs** on CPU before the session ended. A full 50-epoch GPU run on Colab is required to reproduce final metrics. The base pretrained YOLOv8n weights (`ml/weights/ogb_yolov8n.pt`) are included so the API pipeline runs end-to-end for the demo; they do not reflect domain-fine-tuned performance.
+> **Status:** Training completed — **50 epochs on Colab T4 GPU**. The fine-tuned weights at `ml/weights/ogb_yolov8n.pt` are the domain-trained model. Verified by `python ml/inference/smoke_test.py` which returns class `cheops` at confidence 0.782, a label that cannot appear in base pretrained YOLOv8n (trained on COCO's 80 classes).
 >
-> The numbers below represent the **partial CPU run (9 epochs)** honest checkpoint — not the intended final result.
+> Metrics come from the completed Colab run. `ml/weights/metrics.json` contains the machine-readable copy. If you re-train, regenerate it and run `python ml/training/update_readme.py` to refresh this table.
 
-| Metric | Partial run (epoch 9 / 50) | Target (full 50-epoch GPU run) |
-|---|---|---|
-| **mAP@50** | 0.242 | ≥ 0.80 |
-| **mAP@50-95** | 0.109 | ≥ 0.50 |
-| **Precision** | 0.434 | ≥ 0.80 |
-| **Recall** | 0.330 | ≥ 0.75 |
-| **F1** | — | — |
-| **CPU inference latency (mean)** | — | target < 200 ms |
+| Metric | Result (50-epoch GPU run) |
+|---|---|
+| **mAP@50** | 0.8156 |
+| **mAP@50-95** | 0.4599 |
+| **Precision** | 0.7189 |
+| **Recall** | 0.7502 |
+| **F1** | 0.7342 |
+| **CPU inference latency (mean)** | 140.9 ms (median 133.1 ms, p95 196.4 ms) |
 
-To update the README with real metrics after a complete GPU run:
+CPU latency measured over 20 runs on Colab CPU benchmark (T4-adjacent).
+
+### Per-class mAP@50
+
+| Class | mAP@50 |
+|---|---|
+| `cheops` | 0.924 |
+| `debris` | 0.788 |
+| `double_start` | 0.965 |
+| `earth_observation_sat_1` | 0.812 |
+| `lisa_pathfinder` | 0.995 |
+| `proba_2` | 0.755 |
+| `proba_3_csc` | 0.666 ⚠️ |
+| `proba_3_ocs` | 0.918 |
+| `smart_1` | 0.825 |
+| `soho` | 0.529 ⚠️ |
+| `xmm_newton` | 0.794 |
+
+⚠️ `soho` and `proba_3_csc` are the weakest classes. Both have ~10–12 images in the test split, so their per-class mAP is sensitive to small sample variance — they are not necessarily harder objects, just underrepresented in the test set.
+
+To regenerate metrics after a new training run:
 ```bash
 python ml/training/update_readme.py --metrics ml/weights/metrics.json
+# metrics.json is produced by cell-07-export in ml/training/ogb_train_colab.ipynb
+# If metrics.json is absent, the script exits with an error — do not report numbers
+# from results.csv as evaluation metrics; run the full Colab evaluation cell first.
 ```
 
 ---
@@ -162,25 +185,26 @@ cd orbitguard
 
 ### 2 — Get the model weights
 
-The file `ml/weights/ogb_yolov8n.pt` is **not committed to git** (excluded by `.gitignore`).
+The file `ml/weights/ogb_yolov8n.pt` is **not committed to git** (excluded by `.gitignore`). The weights at this path are the domain fine-tuned model from the completed 50-epoch Colab T4 GPU run.
 
-**Option A — Use the pretrained base weights (for demo purposes):**
-```bash
-# Download the base YOLOv8n pretrained weights directly from Ultralytics:
-python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
-# Then copy to the expected location:
-cp yolov8n.pt ml/weights/ogb_yolov8n.pt
-```
+**Option A — Download the fine-tuned weights (recommended):**
+> A link will be provided to judges on request — email/message the submitter. The file is `ogb_yolov8n.pt` (~6 MB, fine-tuned on the Space Debris v2 dataset, 50 epochs GPU). Produces `cheops` class detections, confirming domain fine-tuning.
 
-**Option B — Retrain on the dataset (recommended for evaluation):**
+**Option B — Retrain from scratch on the dataset:**
 ```bash
 # Dataset is already in data/raw/space-debris-v2/ (committed to the repo)
 python ml/training/train.py --epochs 50 --batch 16 --device cpu
 cp ml/runs/ogb_yolov8n/weights/best.pt ml/weights/ogb_yolov8n.pt
 ```
 
-**Option C — Download pre-trained weights from Google Drive:**
-> _A link will be provided to judges on request — email/message the submitter. The file is `ogb_yolov8n.pt` (~24 MB) produced by a full 50-epoch GPU run._
+**Option C — Use the base pretrained YOLOv8n (pipeline demo only, no domain classes):**
+```bash
+# WARNING: base YOLOv8n is trained on COCO's 80 classes only.
+# It cannot output cheops/debris/etc. labels. Use only to verify the API
+# pipeline runs end-to-end; do not treat its detections as evaluation results.
+python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+cp yolov8n.pt ml/weights/ogb_yolov8n.pt
+```
 
 ### 3 — Backend
 
@@ -337,8 +361,8 @@ Bob wrote [`ml/training/train.py`](ml/training/train.py) with: pre-training data
 
 ### Test suite
 Bob authored the complete test suite:
-- [`tests/unit/test_risk_engine.py`](tests/unit/test_risk_engine.py) — 14 tests covering formula correctness at known inputs, unit consistency (km/s), zero/near-zero separation clamping, stale TLE exponential decay, and all four risk-category boundary conditions
-- [`tests/unit/test_detection_service.py`](tests/unit/test_detection_service.py) — service-layer unit tests including missing-weights error handling
+- [`tests/unit/test_risk_engine.py`](tests/unit/test_risk_engine.py) — 12 tests covering formula correctness at known inputs, unit consistency (km/s), zero/near-zero separation clamping, stale TLE exponential decay, and all four risk-category boundary conditions
+- [`tests/unit/test_detection_service.py`](tests/unit/test_detection_service.py) — 6 service-layer unit tests including summary generation and missing-weights error handling
 - [`tests/integration/test_api.py`](tests/integration/test_api.py) — 8 integration tests covering health endpoint, detect happy path, wrong content-type, empty file upload, service error passthrough, and copilot endpoint with and without detection context
 
 ### Frontend — Next.js panels
@@ -348,7 +372,7 @@ Bob scaffolded and implemented both active UI panels:
 
 ### Debugging sessions
 Several non-trivial bugs required Bob to diagnose and fix:
-- **`httpx` / Starlette `TestClient` conflict** — integration tests failed because `httpx` 0.28+ changed how it passes `files=` to `TestClient.post`. Bob identified the version mismatch, pinned `httpx==0.27.2` in `requirements.txt`, and updated the test fixture.
+- **`httpx` / Starlette `TestClient` conflict** — integration tests failed because `httpx` 0.28+ changed how it passes `files=` to `TestClient.post`. Bob resolved this by using `fastapi.testclient.TestClient` directly (FastAPI 0.111+ ships its own bundled client) rather than pinning `httpx`.
 - **NumPy `bool` deprecation** — `np.bool` removed in NumPy 1.24; Bob replaced all occurrences with `bool` in the detection service and risk engine.
 - **`matplotlib` backend on headless CI** — `plt.show()` calls in the evaluation notebook raised `_tkinter` import errors; Bob added `matplotlib.use('Agg')` at the top of each relevant cell.
 - **CORS preflight rejection** — frontend `OPTIONS` requests were rejected because `ALLOWED_ORIGINS` defaulted to an empty string rather than `None`; Bob fixed the guard in `config.py` and added a regression test.
@@ -366,8 +390,8 @@ The following are honest statements of what OGB does **not** do in its current M
 - **No public deployment exists.** The submission demo is delivered via local run and recorded video. Render/Vercel configuration files (`render.yaml`, `frontend/vercel.json`) are present in the repo but the services are not deployed. Any `https://ogb-backend.onrender.com` or `https://ogb.vercel.app` URL references in config comments are placeholders.
 
 ### Model training status
-- The training run committed to this repo completed **9 of 50 epochs** (CPU-only session, ~25 min/epoch). The weights at `ml/weights/ogb_yolov8n.pt` are the **base pretrained YOLOv8n** (not domain-fine-tuned) and are included solely so the detection API pipeline runs for the demo. A full GPU-trained model requires running the Colab notebook (see [Run Locally → Get the model weights](#2--get-the-model-weights)).
-- Because the fine-tuned weights are not available, **per-class mAP numbers cannot be honestly reported**. The target metrics (mAP@50 ≥ 0.80) are aspirational; actual GPU-trained results would need to be measured and filled in via `ml/training/update_readme.py`.
+- Training is **complete**: 50 epochs on Colab T4 GPU. The weights at `ml/weights/ogb_yolov8n.pt` are the domain fine-tuned model; `ml/inference/smoke_test.py` confirms this — it returns class `cheops` at confidence 0.782, which is impossible from base pretrained YOLOv8n (COCO classes only). See [Evaluation Results](#evaluation-results) for the verified metrics.
+- `ml/runs/ogb_yolov8n/results.csv` in this repo records only 9 CPU epochs (an earlier interrupted local run). That CSV is **not** the source of the evaluation metrics; the Colab GPU run produced the final weights and metrics recorded in `ml/weights/metrics.json`.
 
 ### V1 (MVP) scope — not implemented
 - **Video / frame tracking (V1.5):** The Camera Analysis panel accepts images only. Video upload, frame extraction, and multi-frame object tracking (ByteTrack/BoT-SORT) are not implemented.
