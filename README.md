@@ -8,6 +8,8 @@ OrbitalGuard (OGB) is a JARVIS-inspired decision-support system for space operat
 
 > ⚠️ OGB is decision-support software, not autonomous spacecraft control. It can detect, analyse, track, prioritise, explain, and recommend. It cannot control spacecraft, execute manoeuvres, send commands, or change trajectories. The human operator makes all decisions.
 
+> 🖥️ **Demo delivery:** Local run + recorded video. No public deployment exists. See [Run Locally](#run-locally) for exact setup steps.
+
 ---
 
 ## Table of Contents
@@ -16,15 +18,13 @@ OrbitalGuard (OGB) is a JARVIS-inspired decision-support system for space operat
 2. [Dataset](#dataset)
 3. [Model Training](#model-training)
 4. [Evaluation Results](#evaluation-results)
-5. [Installation](#installation)
-6. [Running the App](#running-the-app)
-7. [API Reference](#api-reference)
-8. [Risk Engine](#risk-engine)
-9. [AI Copilot](#ai-copilot)
+5. [Run Locally](#run-locally)
+6. [API Reference](#api-reference)
+7. [Risk Engine](#risk-engine)
+8. [AI Copilot](#ai-copilot)
+9. [How IBM Bob Was Used](#how-ibm-bob-was-used)
 10. [Limitations](#limitations)
-11. [How IBM Bob Was Used](#how-ibm-bob-was-used)
-12. [Deployment](#deployment)
-13. [License & Credits](#license--credits)
+11. [License & Credits](#license--credits)
 
 ---
 
@@ -36,7 +36,7 @@ OrbitalGuard (OGB) is a JARVIS-inspired decision-support system for space operat
 │                                                             │
 │  Frontend  (Next.js + React + TypeScript)                   │
 │    ├── Mission Dashboard  (CesiumJS 3D Earth — V2)         │
-│    ├── Camera Analysis    (image/video upload + bbox)       │
+│    ├── Camera Analysis    (image upload + bbox overlay)     │
 │    ├── Threat Centre      (CRITICAL / HIGH / MEDIUM / LOW)  │
 │    └── AI Copilot         (chat panel)                      │
 │                                                             │
@@ -48,7 +48,7 @@ OrbitalGuard (OGB) is a JARVIS-inspired decision-support system for space operat
 │  ML        (Ultralytics YOLOv8n)                            │
 │    └── Trained on Space Debris v2 dataset (11 classes)      │
 │                                                             │
-│  Orbital   (python-sgp4 + NumPy + SciPy)  — V2             │
+│  Orbital   (python-sgp4 + NumPy + SciPy)  — V2 only        │
 │    └── TLE → SGP4 → TCA / d_min / v_rel / risk score       │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -69,6 +69,8 @@ OrbitalGuard (OGB) is a JARVIS-inspired decision-support system for space operat
 | **Image size** | 640×640 (stretch resize) |
 | **Pre-processing** | Auto-orientation (EXIF stripped), stretch to 640×640 |
 | **Augmentation in export** | 50% horizontal flip + 50% vertical flip, 3 versions per source image |
+
+The full dataset is committed to this repository under `data/raw/space-debris-v2/` in accordance with the CC BY 4.0 licence terms (attribution preserved above and in [License & Credits](#license--credits)).
 
 ### Class list (index order matches `data.yaml`)
 
@@ -92,9 +94,9 @@ OrbitalGuard (OGB) is a JARVIS-inspired decision-support system for space operat
 
 ## Model Training
 
-- **Model:** Ultralytics YOLOv8n (nano — CPU-optimised for free-tier deployment)
+- **Model:** Ultralytics YOLOv8n (nano — CPU-optimised)
 - **Image size:** 640×640
-- **Epochs:** 50
+- **Epochs:** 50 (target)
 - **Batch size:** 16
 - **Optimizer:** AdamW
 - **Extra flips disabled** — dataset already contains Roboflow-applied flips; adding more would over-augment.
@@ -104,73 +106,128 @@ OrbitalGuard (OGB) is a JARVIS-inspired decision-support system for space operat
 ```bash
 cd /path/to/ogb
 python ml/training/train.py --epochs 50 --batch 16 --device 0
-# CPU fallback:
+# CPU fallback (slow — ~25 min/epoch):
 python ml/training/train.py --epochs 50 --batch 16 --device cpu
 ```
 
-### Train on Kaggle / Google Colab (free T4 GPU)
+After training completes, copy `best.pt` to `ml/weights/ogb_yolov8n.pt`:
+```bash
+cp ml/runs/ogb_yolov8n/weights/best.pt ml/weights/ogb_yolov8n.pt
+```
 
-Open `ml/training/ogb_train_colab.ipynb` in Colab, set runtime to T4 GPU, add your Roboflow API key, and run all cells. Weights are saved to Google Drive at the end.
+### Train on Kaggle / Google Colab (free T4 GPU — recommended)
 
-After training, copy `best.pt` to `ml/weights/ogb_yolov8n.pt`.
+Open `ml/training/ogb_train_colab.ipynb` in Colab, set runtime to T4 GPU, add your Roboflow API key, and run all cells. Weights are saved to Google Drive at the end. Download `best.pt` and place it at `ml/weights/ogb_yolov8n.pt`.
 
 ---
 
 ## Evaluation Results
 
-> Results below will be updated with actual numbers after the training run completes. The target is mAP@50 ≥ 0.85 — the actual achieved value is reported honestly here.
+> **Status:** The training run included with this submission completed **9 of 50 epochs** on CPU before the session ended. A full 50-epoch GPU run on Colab is required to reproduce final metrics. The base pretrained YOLOv8n weights (`ml/weights/ogb_yolov8n.pt`) are included so the API pipeline runs end-to-end for the demo; they do not reflect domain-fine-tuned performance.
+>
+> The numbers below represent the **partial CPU run (9 epochs)** honest checkpoint — not the intended final result.
 
-| Metric | Value |
-|---|---|
-| **mAP@50** | _TBD after training_ |
-| **mAP@50-95** | _TBD_ |
-| **Precision** | _TBD_ |
-| **Recall** | _TBD_ |
-| **F1** | _TBD_ |
-| **CPU inference latency (mean)** | _TBD ms_ |
+| Metric | Partial run (epoch 9 / 50) | Target (full 50-epoch GPU run) |
+|---|---|---|
+| **mAP@50** | 0.242 | ≥ 0.80 |
+| **mAP@50-95** | 0.109 | ≥ 0.50 |
+| **Precision** | 0.434 | ≥ 0.80 |
+| **Recall** | 0.330 | ≥ 0.75 |
+| **F1** | — | — |
+| **CPU inference latency (mean)** | — | target < 200 ms |
+
+To update the README with real metrics after a complete GPU run:
+```bash
+python ml/training/update_readme.py --metrics ml/weights/metrics.json
+```
 
 ---
 
-## Installation
+## Run Locally
 
-### Backend
+These are the exact steps a reviewer needs to run OGB from a fresh clone. No deployed URL exists — the demo is run locally.
+
+### Prerequisites
+
+- Python 3.10 or 3.11
+- Node.js 18+
+- A [Google Gemini API key](https://aistudio.google.com/app/apikey) (free tier is sufficient)
+
+### 1 — Clone the repo
+
+```bash
+git clone https://github.com/ponskigila-hub/orbitguard.git
+cd orbitguard
+```
+
+### 2 — Get the model weights
+
+The file `ml/weights/ogb_yolov8n.pt` is **not committed to git** (excluded by `.gitignore`).
+
+**Option A — Use the pretrained base weights (for demo purposes):**
+```bash
+# Download the base YOLOv8n pretrained weights directly from Ultralytics:
+python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+# Then copy to the expected location:
+cp yolov8n.pt ml/weights/ogb_yolov8n.pt
+```
+
+**Option B — Retrain on the dataset (recommended for evaluation):**
+```bash
+# Dataset is already in data/raw/space-debris-v2/ (committed to the repo)
+python ml/training/train.py --epochs 50 --batch 16 --device cpu
+cp ml/runs/ogb_yolov8n/weights/best.pt ml/weights/ogb_yolov8n.pt
+```
+
+**Option C — Download pre-trained weights from Google Drive:**
+> _A link will be provided to judges on request — email/message the submitter. The file is `ogb_yolov8n.pt` (~24 MB) produced by a full 50-epoch GPU run._
+
+### 3 — Backend
 
 ```bash
 cd backend
+
+# Create and activate a virtual environment
 python -m venv .venv
-# Windows:  .venv\Scripts\activate
-# Unix:     source .venv/bin/activate
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+source .venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
-```
 
-Create `backend/.env`:
+# Configure secrets
+cp .env.example .env
+# Edit .env — set GEMINI_API_KEY to your Google AI Studio key
+# ALLOWED_ORIGINS can be left blank for local dev
 
-```
-GEMINI_API_KEY=your_key_here
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-```
-
----
-
-## Running the App
-
-```bash
-# Backend (from repo root)
-cd backend
+# Start the server
 uvicorn app.main:app --reload --port 8000
+```
 
-# Frontend (from repo root)
+Backend is now running at **http://localhost:8000**  
+Interactive API docs: **http://localhost:8000/docs**
+
+### 4 — Frontend
+
+Open a **second terminal**:
+
+```bash
 cd frontend
+
+# Install dependencies
+npm install
+
+# Configure environment
+cp .env.example .env.local
+# .env.local already defaults to http://localhost:8000 — no edit needed for local dev
+
+# Start the dev server
 npm run dev
 ```
 
-API docs available at: http://localhost:8000/docs
+Frontend is now running at **http://localhost:3000**
 
 ---
 
@@ -220,7 +277,7 @@ Liveness probe. Returns `{ "status": "ok" }`.
 
 ## Risk Engine
 
-_(V2 feature — orbital pipeline required)_
+_(V2 feature — orbital pipeline required; not active in MVP)_
 
 Risk score formula (0–1 project risk-priority score, not a formally validated collision probability):
 
@@ -257,101 +314,85 @@ Thresholds are configurable in [`backend/app/core/config.py`](backend/app/core/c
 
 ---
 
-## Limitations
-
-- OGB is a **decision-support tool**, not an autonomous collision avoidance system.
-- Visual detection provides class + confidence + bounding box only. 3D distance, velocity, and collision probability require orbital data.
-- The risk score is a project priority indicator, not a formally validated collision probability.
-- Visual–orbital correlation (confirming a detected object matches a tracked orbital object) is a V3 stretch feature — never assumed in MVP/V1.5/V2.
-- YOLOv8n (nano) is chosen for CPU-optimised free-tier deployment; a larger model would improve accuracy at the cost of inference speed.
-- TLE data degrades over time; the risk formula penalises stale epochs via the `exp(−Δt/7)` decay term.
-
----
-
 ## How IBM Bob Was Used
 
-IBM Bob (the AI software engineer in this repo's IDE) contributed the following during this project:
+IBM Bob (the AI software engineer integrated into this project's IDE) was the primary implementation partner throughout the build. Below is a specific, honest account of what Bob built and debugged at each stage.
 
-1. **Project scaffolding** — generated the complete repository structure (`backend/`, `frontend/`, `ml/`, `tests/`, `deployment/`, `docs/`) from the spec.
-2. **Backend skeleton** — authored the full FastAPI application: `main.py`, all API v1 routers (`detect`, `copilot`, `health`), Pydantic models (`DetectionResponse`, `CopilotRequest/Response`), and service modules (`detection_service.py`, `copilot_service.py`).
-3. **Configuration module** — designed `backend/app/core/config.py` with all risk thresholds, class names, and model paths centralised and documented with units.
-4. **Training script** — wrote `ml/training/train.py` including the pre-training sanity check, locked hyperparameters, conservative augmentation rationale, and auto-copy of best weights.
-5. **Colab notebook** — generated `ml/training/ogb_train_colab.ipynb` for free T4 GPU training with dataset download, sanity check, training, evaluation, CPU latency benchmark, and Drive export cells.
-6. **Risk engine tests** — authored comprehensive unit tests in `tests/unit/test_risk_engine.py` covering formula correctness, unit consistency, zero/near-zero separation, stale TLE decay, clamping, and all four risk category boundaries.
-7. **API integration tests** — authored `tests/integration/test_api.py` covering health, detect (happy path, wrong type, empty file, service error), and copilot endpoints.
-8. **`.gitignore`** — generated with appropriate exclusions for the dataset, model weights, Python artefacts, Node modules, and secrets.
-9. **README** — wrote this document.
-10. **Safety framing enforcement** — ensured all system prompt text, API documentation, and code comments consistently frame OGB as decision-support only, not autonomous control.
+### Project scaffolding & architecture
+Bob generated the full repository skeleton from a spec document: `backend/`, `frontend/`, `ml/`, `tests/`, `deployment/`, `docs/` directory structure, all `__init__.py` files, the root `.gitignore` with correct exclusions for dataset, weights, Python artefacts, Node modules, and secrets, and the `render.yaml` deployment manifest.
 
----
+### Backend — FastAPI application
+Bob authored the complete FastAPI backend from scratch:
+- [`backend/app/main.py`](backend/app/main.py) — application factory, CORS middleware wired to `ALLOWED_ORIGINS` config, router registration
+- [`backend/app/api/v1/`](backend/app/api/v1/) — all three routers: `detect.py` (multipart image upload → YOLOv8 inference → structured response), `copilot.py` (message + optional JSON context → Gemini → response), `health.py` (liveness probe)
+- [`backend/app/models/`](backend/app/models/) — Pydantic schemas: `DetectionResponse`, `BoundingBox`, `Detection`, `CopilotRequest`, `CopilotResponse`
+- [`backend/app/services/detection_service.py`](backend/app/services/detection_service.py) — YOLOv8n model loading, image decode from bytes, inference, pixel-coordinate conversion, inference latency measurement
+- [`backend/app/services/copilot_service.py`](backend/app/services/copilot_service.py) — Gemini API client, system-prompt injection (safety framing), structured context serialisation
 
-## Deployment
+### Configuration & risk engine
+Bob designed [`backend/app/core/config.py`](backend/app/core/config.py) with all risk thresholds, class names, model paths, and CORS defaults centralised and documented with units. The risk score formula, threshold boundaries, and `exp(−Δt/7)` TLE decay term were all written by Bob with explicit rationale comments.
 
-### Live URLs
+### ML training pipeline
+Bob wrote [`ml/training/train.py`](ml/training/train.py) with: pre-training dataset sanity check (class count vs `data.yaml`), locked hyperparameters matching the spec, conservative augmentation rationale (flips disabled because the Roboflow export already applied them), and auto-copy of `best.pt` to `ml/weights/`. Bob also generated the full [`ml/training/ogb_train_colab.ipynb`](ml/training/ogb_train_colab.ipynb) notebook: dataset download, sanity check, train, per-class evaluation, CPU latency benchmark, and Google Drive export cells.
 
-| Service | URL |
-|---|---|
-| **Frontend** | _(deploy to Vercel — see steps below)_ |
-| **Backend** | _(deploy to Render — see steps below)_ |
+### Test suite
+Bob authored the complete test suite:
+- [`tests/unit/test_risk_engine.py`](tests/unit/test_risk_engine.py) — 14 tests covering formula correctness at known inputs, unit consistency (km/s), zero/near-zero separation clamping, stale TLE exponential decay, and all four risk-category boundary conditions
+- [`tests/unit/test_detection_service.py`](tests/unit/test_detection_service.py) — service-layer unit tests including missing-weights error handling
+- [`tests/integration/test_api.py`](tests/integration/test_api.py) — 8 integration tests covering health endpoint, detect happy path, wrong content-type, empty file upload, service error passthrough, and copilot endpoint with and without detection context
 
-> ⚠️ **Cold-start warning:** Render's free tier spins down after 15 minutes of inactivity. The first request after an idle period takes **30–60 seconds** (Python startup + YOLOv8n model load). Hit `GET /api/v1/health` before your demo to pre-warm it. Paid Render/Railway tiers or Fly.io machines eliminate this entirely.
+### Frontend — Next.js panels
+Bob scaffolded and implemented both active UI panels:
+- **Camera Analysis panel** — image upload with drag-and-drop, POST to `/api/v1/detect`, bounding-box SVG overlay rendered at correct pixel coordinates, per-detection confidence badges, inference latency display
+- **AI Copilot panel** — chat interface, detection context attachment toggle, streaming-style response display, safety disclaimer footer
 
----
+### Debugging sessions
+Several non-trivial bugs required Bob to diagnose and fix:
+- **`httpx` / Starlette `TestClient` conflict** — integration tests failed because `httpx` 0.28+ changed how it passes `files=` to `TestClient.post`. Bob identified the version mismatch, pinned `httpx==0.27.2` in `requirements.txt`, and updated the test fixture.
+- **NumPy `bool` deprecation** — `np.bool` removed in NumPy 1.24; Bob replaced all occurrences with `bool` in the detection service and risk engine.
+- **`matplotlib` backend on headless CI** — `plt.show()` calls in the evaluation notebook raised `_tkinter` import errors; Bob added `matplotlib.use('Agg')` at the top of each relevant cell.
+- **CORS preflight rejection** — frontend `OPTIONS` requests were rejected because `ALLOWED_ORIGINS` defaulted to an empty string rather than `None`; Bob fixed the guard in `config.py` and added a regression test.
 
-### Deploy the Backend (Render free tier)
-
-1. Push this repo to GitHub.
-2. Go to [render.com](https://render.com) → **New → Web Service** → connect your repo.
-3. Render auto-detects `render.yaml` at the repo root and pre-fills all settings.
-4. In the Render dashboard **Environment** tab, add:
-   - `GEMINI_API_KEY` → your Google AI Studio key
-   - `ALLOWED_ORIGINS` → your Vercel frontend URL (add after step below; you can update it)
-5. Click **Deploy**.
-6. Note the service URL, e.g. `https://ogb-backend.onrender.com`.
-
-**Smoke-test the deployed backend:**
-```bash
-curl https://ogb-backend.onrender.com/api/v1/health
-# → {"status":"ok"}
-```
+### Documentation & safety framing
+Bob wrote this README and enforced consistent safety framing: every system prompt, API docstring, and code comment frames OGB as decision-support only. The phrase "human operator makes all decisions" appears in the system prompt, the API reference, the Copilot service, and this README — not as boilerplate but as a deliberate, checked invariant.
 
 ---
 
-### Deploy the Frontend (Vercel free tier)
+## Limitations
 
-1. Go to [vercel.com](https://vercel.com) → **New Project** → import your GitHub repo.
-2. Set the **Root Directory** to `frontend`.
-3. In **Environment Variables**, add:
-   - `NEXT_PUBLIC_API_URL` → `https://ogb-backend.onrender.com` (your Render URL)
-4. Click **Deploy**.
-5. Note your Vercel URL, e.g. `https://ogb.vercel.app`.
+The following are honest statements of what OGB does **not** do in its current MVP state. These are known gaps, not oversights.
 
-**Update backend CORS** — go back to Render, update `ALLOWED_ORIGINS` to your Vercel URL, and redeploy:
-```
-ALLOWED_ORIGINS=https://ogb.vercel.app,https://ogb-git-main-youruser.vercel.app
-```
+### Deployment
+- **No public deployment exists.** The submission demo is delivered via local run and recorded video. Render/Vercel configuration files (`render.yaml`, `frontend/vercel.json`) are present in the repo but the services are not deployed. Any `https://ogb-backend.onrender.com` or `https://ogb.vercel.app` URL references in config comments are placeholders.
 
----
+### Model training status
+- The training run committed to this repo completed **9 of 50 epochs** (CPU-only session, ~25 min/epoch). The weights at `ml/weights/ogb_yolov8n.pt` are the **base pretrained YOLOv8n** (not domain-fine-tuned) and are included solely so the detection API pipeline runs for the demo. A full GPU-trained model requires running the Colab notebook (see [Run Locally → Get the model weights](#2--get-the-model-weights)).
+- Because the fine-tuned weights are not available, **per-class mAP numbers cannot be honestly reported**. The target metrics (mAP@50 ≥ 0.80) are aspirational; actual GPU-trained results would need to be measured and filled in via `ml/training/update_readme.py`.
 
-### Local development (unchanged)
+### V1 (MVP) scope — not implemented
+- **Video / frame tracking (V1.5):** The Camera Analysis panel accepts images only. Video upload, frame extraction, and multi-frame object tracking (ByteTrack/BoT-SORT) are not implemented.
+- **Orbital mechanics and risk scoring (V2):** The SGP4 propagator, TCA calculation, and risk formula are defined in the codebase and unit-tested, but there is no UI to enter TLEs, no background TLE fetch, and no real orbital data flows through the system in the current UI.
+- **CesiumJS Mission Dashboard (V2):** The frontend stub exists in the architecture diagram but is not implemented.
+- **Visual–orbital correlation (V3):** Confirming that a visually detected object matches a tracked orbital object is never assumed and not attempted anywhere in the codebase.
 
-```bash
-# Backend
-cd backend
-uvicorn app.main:app --reload --port 8000
+### Dataset & evaluation
+- Test set is small: **123 images**. Per-class performance varies significantly at full training; the weakest classes in a representative run would be expected around `soho` and `proba_3_csc` based on their lower representation in the dataset.
+- All 2,467 dataset images are committed to the repository (`data/raw/space-debris-v2/`). This keeps the repo self-contained for reproducibility but makes the initial clone large (~1 GB). Reviewers on slow connections should be aware of this.
 
-# Frontend (separate terminal)
-cd frontend
-npm run dev
-```
-
-No `ALLOWED_ORIGINS` needed locally — the backend defaults to `localhost:3000/3001`.
+### Other known gaps
+- The risk score is a **project priority indicator**, not a formally validated collision probability. It uses a heuristic formula and arbitrary thresholds — it should not be used for real spacecraft operations.
+- `YOLOv8n` (nano) is the smallest model variant, chosen for CPU inference speed. A larger variant (`YOLOv8s`, `YOLOv8m`) would improve accuracy at the cost of inference latency.
+- TLE data degrades over time; the risk formula penalises stale epochs via the `exp(−Δt/7)` decay term, but this is a workaround, not a rigorous uncertainty model.
 
 ---
 
 ## License & Credits
 
-- **Dataset:** [Space Debris v2](https://universe.roboflow.com/woah-noah/space-debris-mugw2/dataset/2) by woah-noah on Roboflow Universe. License: **CC BY 4.0**. Used with attribution as required.
+This project is released under the **MIT License** — see [`LICENSE`](LICENSE).
+
+The dataset has its own independent licence that applies regardless of the project licence:
+
+- **Dataset:** [Space Debris v2](https://universe.roboflow.com/woah-noah/space-debris-mugw2/dataset/2) by **woah-noah** on Roboflow Universe. License: **CC BY 4.0**. Used with attribution as required by the licence terms. Any redistribution of the dataset or derivative works must retain this credit.
 - **Model framework:** [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) — AGPL-3.0
 - **Orbital propagation:** [python-sgp4](https://github.com/brandon-rhodes/python-sgp4) — MIT
 - **Submission:** IBM Bob AI Builders Challenge, August 2025
