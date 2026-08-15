@@ -20,11 +20,12 @@ OrbitalGuard (OGB) is a JARVIS-inspired decision-support system for space operat
 4. [Evaluation Results](#evaluation-results)
 5. [Run Locally](#run-locally)
 6. [API Reference](#api-reference)
-7. [Risk Engine](#risk-engine)
-8. [AI Copilot](#ai-copilot)
-9. [How IBM Bob Was Used](#how-ibm-bob-was-used)
-10. [Limitations](#limitations)
-11. [License & Credits](#license--credits)
+7. [Orbital Intelligence (V2)](#orbital-intelligence-v2)
+8. [Risk Engine](#risk-engine)
+9. [AI Copilot](#ai-copilot)
+10. [How IBM Bob Was Used](#how-ibm-bob-was-used)
+11. [Limitations](#limitations)
+12. [License & Credits](#license--credits)
 
 ---
 
@@ -297,11 +298,98 @@ Send a message to the AI copilot. Optionally attach structured detection, orbita
 
 Liveness probe. Returns `{ "status": "ok" }`.
 
+### `POST /api/v1/orbital/analyze` _(V2)_
+
+Propagate a TLE and optionally run conjunction analysis.
+
+**Request:**
+```json
+{
+  "tle_line1": "1 88888U ...",
+  "tle_line2": "2 88888 ...",
+  "timestamp_utc": "2025-08-01T12:00:00Z",
+  "target_tle_line1": "1 88889U ...",
+  "target_tle_line2": "2 88889 ...",
+  "conjunction_window_hours": 24
+}
+```
+
+**Response:**
+```json
+{
+  "propagated_state": {
+    "ok": true,
+    "position_km": [2328.97, -5995.22, 1719.97],
+    "velocity_km_s": [2.9121, -0.9834, -7.0908],
+    "epoch_utc": "1980-10-01T23:41:24.113Z",
+    "tle_age_days": 0.0,
+    "propagated_at_utc": "1980-10-01T23:41:24.113Z"
+  },
+  "conjunction": {
+    "ok": true,
+    "tca_utc": "1980-10-02T00:15:42.000Z",
+    "d_min_km": 12.456,
+    "v_rel_km_s": 0.832,
+    "risk": { "risk_score": 0.000034, "risk_category": "LOW" }
+  },
+  "analysis_type": "propagation_and_conjunction"
+}
+```
+
+---
+
+## Orbital Intelligence (V2)
+
+### SGP4 Source
+
+Uses **python-sgp4** by Brandon Rhodes (https://github.com/brandon-rhodes/python-sgp4), version ≥ 2.23.
+
+API: `sgp4.api.Satrec` + `jday` (the Cython-accelerated v2.x interface).
+
+### Close-Approach Algorithm
+
+Two-phase approach to find Time of Closest Approach (TCA):
+
+1. **Coarse phase** — sample `|r1(t) − r2(t)|` every 60 seconds across the analysis window to find the sub-interval that brackets the minimum.
+2. **Fine phase** — `scipy.optimize.minimize_scalar` (Brent's method, bounded) on the separation function over the bracketed interval ± 120 s guard, to sub-second TCA precision.
+3. **Relative velocity** — central finite difference at TCA ± 1 s.
+4. **Risk** — delegates directly to `risk_service.calculate_risk_full()`. No math is re-implemented.
+
+### Reference Test Vector
+
+The SGP4 implementation is validated against **object 88888** from:
+
+> Vallado, D. A.; Crawford, P.; Hujsak, R.; Kelso, T. S. (2006).
+> _"Revisiting Spacetrack Report #3: Rev 2."_ AIAA 2006-6753.
+
+TLE (from `sgp4` package's `SGP4-VER.TLE` file):
+```
+1 88888U          80275.98708465  .00073094  13844-3  66816-4 0    87
+2 88888  72.8435 115.9689 0086731  52.6988 110.5714 16.05824518  1058
+```
+
+Reference state at tsince = 0 (from `sgp4` package `tcppver.out`):
+```
+r = [2328.96975262, −5995.22051338, 1719.97297192] km
+v = [2.912073281, −0.983417956, −7.090816210] km/s
+```
+
+OGB computed result agrees to:
+- Position: δ < 1 × 10⁻³ km (1 m) for all three components ✓
+- Velocity: δ < 1 × 10⁻⁶ km/s (1 mm/s) for all three components ✓
+
+Verified by `tests/unit/test_orbital_service.py` (12 tests, all pass).
+
+### UI: Orbital Intelligence Page
+
+Navigate to `/orbital` (link in the top navigation bar). Features:
+- **TLE Analysis Form** — paste TLE lines, optional timestamp, optional conjunction target
+- **Threat Details** — full result: position vector, velocity vector, TLE age, TCA, d_min, v_rel, risk
+- **Threat Center** — list of all analyzed objects, color-coded 🔴🟠🟡🟢, sortable by risk/d_min/TLE age
+
 ---
 
 ## Risk Engine
-
-_(V2 feature — orbital pipeline required; not active in MVP)_
 
 Risk score formula (0–1 project risk-priority score, not a formally validated collision probability):
 
@@ -395,9 +483,13 @@ The following are honest statements of what OGB does **not** do in its current M
 
 ### V1 (MVP) scope — not implemented
 - **Video / frame tracking (V1.5):** The Camera Analysis panel accepts images only. Video upload, frame extraction, and multi-frame object tracking (ByteTrack/BoT-SORT) are not implemented.
-- **Orbital mechanics and risk scoring (V2):** The SGP4 propagator, TCA calculation, and risk formula are defined in the codebase and unit-tested, but there is no UI to enter TLEs, no background TLE fetch, and no real orbital data flows through the system in the current UI.
-- **CesiumJS Mission Dashboard (V2):** The frontend stub exists in the architecture diagram but is not implemented.
 - **Visual–orbital correlation (V3):** Confirming that a visually detected object matches a tracked orbital object is never assumed and not attempted anywhere in the codebase.
+
+### V2 (Orbital Intelligence) — implemented
+- **SGP4 propagation:** `POST /api/v1/orbital/analyze` is live. TLE → ECI state validated against Vallado 2006 object 88888.
+- **Conjunction analysis:** coarse 60 s sampling + scipy Brent fine-search. 9 tests pass.
+- **Threat Center UI:** `/orbital` page with form, details panel, and sortable threat list.
+- **CesiumJS (V2.5):** Not implemented. Skipped per project scope — a working Threat Center without 3D visuals beats a broken one with them.
 
 ### Dataset & evaluation
 - Test set is small: **123 images**. Per-class performance varies significantly at full training; the weakest classes in a representative run would be expected around `soho` and `proba_3_csc` based on their lower representation in the dataset.

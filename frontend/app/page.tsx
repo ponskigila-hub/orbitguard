@@ -11,7 +11,8 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Shield, RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { Shield, RefreshCw, Satellite } from "lucide-react";
 import BoundingBoxCanvas from "@/components/BoundingBoxCanvas";
 import DetectionSummary from "@/components/DetectionSummary";
 import DropZone from "@/components/DropZone";
@@ -84,7 +85,14 @@ export default function MvpPage() {
               AI Copilot
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/orbital"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono bg-[#0d1117] border border-[#2d4a7a] text-[#7aa2d4] hover:bg-[#1a2847] hover:text-[#c5d8f7] transition-colors"
+            >
+              <Satellite size={13} strokeWidth={1.5} />
+              Orbital Intelligence (V2)
+            </Link>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono bg-[#0d1117] border border-[#2d3748] text-[#4a5568]">
               <span className="w-1.5 h-1.5 rounded-full bg-[#3b82f6] animate-pulse" />
               LIVE

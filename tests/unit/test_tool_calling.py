@@ -6,7 +6,7 @@ Tests that verify:
 1. The real risk_service functions produce the expected values.
 2. The _execute_tool() dispatcher in copilot_service calls the real
    calculate_risk_full() — not a mock — and returns matching numbers.
-3. The propagate_tle stub returns a clear NOT_IMPLEMENTED error.
+3. propagate_tle tool now calls the real SGP4 orbital_service (V2).
 4. Partial / missing orbital data scenario: _execute_tool raises KeyError
    when required fields are absent (Gemini would not call the tool in this
    case, but we verify the defensive behaviour).
@@ -188,19 +188,46 @@ class TestExecuteToolRoundTrip:
 
 
 # ---------------------------------------------------------------------------
-# 3. propagate_tle stub
+# 3. propagate_tle — now wired to real SGP4 orbital_service (V2)
 # ---------------------------------------------------------------------------
 
-class TestPropagateTleStub:
-    def test_returns_not_implemented(self):
+# Vallado 2006 object 88888 TLE (same vector used in test_orbital_service.py)
+# From sgp4 library SGP4-VER.TLE — 69-char lines, checksum verified.
+_TLE_88888_L1 = "1 88888U          80275.98708465  .00073094  13844-3  66816-4 0    87"
+_TLE_88888_L2 = "2 88888  72.8435 115.9689 0086731  52.6988 110.5714 16.05824518  1058"
+
+
+class TestPropagateTleTool:
+    def test_valid_tle_returns_ok(self):
+        """propagate_tle with a valid TLE must return ok=True with position/velocity."""
         result = _execute_tool("propagate_tle", {
-            "tle_line1": "1 25544U ...",
-            "tle_line2": "2 25544 ...",
-            "timestamp_utc": "2025-08-01T00:00:00Z",
+            "tle_line1": _TLE_88888_L1,
+            "tle_line2": _TLE_88888_L2,
+            "timestamp_utc": "1980-10-01T23:41:00Z",
         })
-        assert result["status"] == "NOT_IMPLEMENTED"
+        assert result.get("ok") is True, f"Expected ok=True, got: {result}"
+        assert "position_km" in result
+        assert "velocity_km_s" in result
+        assert len(result["position_km"]) == 3
+
+    def test_missing_args_returns_error(self):
+        """Missing required arguments must return an error (not raise)."""
+        result = _execute_tool("propagate_tle", {
+            "tle_line1": _TLE_88888_L1,
+            # missing tle_line2 and timestamp_utc
+        })
+        assert result.get("ok") is not True
+        assert "error" in result or result.get("status") == "ERROR"
+
+    def test_malformed_tle_returns_ok_false(self):
+        """A TLE with wrong length must return ok=False with an error."""
+        result = _execute_tool("propagate_tle", {
+            "tle_line1": "1 BAD",
+            "tle_line2": "2 BAD",
+            "timestamp_utc": "2025-01-01T00:00:00Z",
+        })
+        assert result.get("ok") is False
         assert "error" in result
-        assert "SGP4" in result["reason"] or "not" in result["reason"].lower()
 
     def test_unknown_tool_returns_error(self):
         result = _execute_tool("nonexistent_tool", {})

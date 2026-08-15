@@ -3,7 +3,13 @@
  * API client — talks to the FastAPI backend.
  */
 
-import type { CopilotRequest, CopilotResult, DetectResult } from "./types";
+import type {
+  CopilotRequest,
+  CopilotResult,
+  DetectResult,
+  OrbitalAnalyzeRequest,
+  OrbitalResult,
+} from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -67,6 +73,44 @@ export async function detectObjects(file: File): Promise<DetectResult> {
 
   if (!response.ok) {
     let message = `Server returned ${response.status}`;
+    try {
+      const body = await response.json();
+      if (body?.detail) message = body.detail;
+    } catch {
+      // ignore JSON parse failure
+    }
+    return { ok: false, status: response.status, message };
+  }
+
+  const data = await response.json();
+  return { ok: true, data };
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/orbital/analyze
+// ---------------------------------------------------------------------------
+
+export async function analyzeOrbital(
+  req: OrbitalAnalyzeRequest
+): Promise<OrbitalResult> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/v1/orbital/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      message:
+        "Cannot reach the OGB backend. Is it running? Check NEXT_PUBLIC_API_URL.",
+    };
+  }
+
+  if (!response.ok) {
+    let message = `Orbital backend returned ${response.status}`;
     try {
       const body = await response.json();
       if (body?.detail) message = body.detail;

@@ -13,9 +13,9 @@ calculate_risk_score  — wraps the real risk_service.calculate_risk_full().
                         The result is passed back to the model; only then
                         may the model report a numeric risk score.
 
-propagate_tle         — NOT IMPLEMENTED in V1. Stubbed with a clear error.
-                        Full SGP4 propagation requires the V2 orbital pipeline
-                        (not yet built). The model will inform the operator.
+propagate_tle         — Real SGP4 propagation via orbital_service (V2).
+                        Accepts TLE line1/line2 + timestamp_utc and returns
+                        ECI position [km] and velocity [km/s].
 """
 from __future__ import annotations
 
@@ -34,6 +34,7 @@ from app.core.config import (
 )
 from app.models.copilot import CopilotRequest, CopilotResponse, ToolCallRecord
 from app.services.risk_service import calculate_risk_full
+from app.services.orbital_service import propagate_tle_state
 
 # ---------------------------------------------------------------------------
 # Tool definitions — declared once, shared between providers
@@ -86,12 +87,12 @@ _TOOL_DECLARATIONS = [
     {
         "name": "propagate_tle",
         "description": (
-            "Propagate a TLE (Two-Line Element set) to a given timestamp using "
-            "SGP4 to obtain position and velocity vectors. "
-            "NOTE: This tool is NOT available in V1 — the SGP4 orbital pipeline "
-            "has not been implemented yet. Calling it will return an error. "
-            "Inform the operator and ask them to supply d_min and v_rel directly "
-            "if they want a risk calculation."
+            "Propagate a TLE (Two-Line Element set) to a given UTC timestamp using "
+            "SGP4 to obtain ECI position [km] and velocity [km/s] vectors. "
+            "Use this when the operator supplies TLE lines and wants the current "
+            "orbital state. The result may be passed to calculate_risk_score if "
+            "d_min and v_rel are also available. "
+            "Never invent or guess TLE lines — only use lines the operator provides."
         ),
         "parameters": {
             "type": "object",
@@ -131,16 +132,16 @@ def _execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         )
 
     if name == "propagate_tle":
-        return {
-            "error": "propagate_tle is not available in V1.",
-            "reason": (
-                "The SGP4 orbital pipeline has not been implemented yet. "
-                "Please supply d_min_km, v_rel_km_s, and tle_age_days directly "
-                "from your own orbital analysis software, and I can run the "
-                "risk calculation from those numbers."
-            ),
-            "status": "NOT_IMPLEMENTED",
-        }
+        tle_line1 = str(args.get("tle_line1", ""))
+        tle_line2 = str(args.get("tle_line2", ""))
+        timestamp_utc = str(args.get("timestamp_utc", ""))
+        if not tle_line1 or not tle_line2 or not timestamp_utc:
+            return {
+                "error": "propagate_tle requires tle_line1, tle_line2, and timestamp_utc.",
+                "status": "ERROR",
+            }
+        result = propagate_tle_state(tle_line1, tle_line2, timestamp_utc)
+        return result
 
     return {"error": f"Unknown tool '{name}'", "status": "ERROR"}
 
@@ -200,7 +201,9 @@ D. ANSWER CAPABILITY QUESTIONS — You know these facts:
   • Classes: {', '.join(CLASS_NAMES)}
   • Risk formula: min(1, (R/d_min) * log10(v_rel+1) * exp(-Δt/7))
   • Default hard-body radius: {HARD_BODY_RADIUS_KM} km
-  • SGP4/TLE propagation: NOT AVAILABLE in V1 — supply d_min and v_rel directly.
+  • SGP4/TLE propagation: AVAILABLE via `propagate_tle` tool (V2 pipeline active). \
+Supply TLE line 1 and line 2 plus a UTC timestamp and this tool returns the ECI \
+position [km] and velocity [km/s].
 
 E. FRAME RISK IN PLAIN LANGUAGE — After a tool call: explain the category \
 (LOW/MEDIUM/HIGH/CRITICAL), what it means operationally, and suggest next steps \

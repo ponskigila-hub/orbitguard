@@ -1,6 +1,6 @@
 /**
  * OGB — OrbitalGuard
- * Shared TypeScript types for the detection and copilot APIs.
+ * Shared TypeScript types for the detection, copilot, and orbital APIs.
  */
 
 // ---------------------------------------------------------------------------
@@ -76,3 +76,77 @@ export interface ApiError {
 export type DetectResult =
   | { ok: true; data: DetectionResponse }
   | { ok: false; status: number; message: string };
+
+// ---------------------------------------------------------------------------
+// Orbital Intelligence (V2)
+// ---------------------------------------------------------------------------
+
+export interface OrbitalAnalyzeRequest {
+  tle_line1: string;
+  tle_line2: string;
+  timestamp_utc?: string;
+  target_tle_line1?: string;
+  target_tle_line2?: string;
+  conjunction_window_hours?: number;
+}
+
+export interface PropagatedState {
+  ok: boolean;
+  position_km?: number[];
+  velocity_km_s?: number[];
+  epoch_utc?: string;
+  tle_age_days?: number;
+  propagated_at_utc?: string;
+  error?: string;
+}
+
+export interface ConjunctionResult {
+  ok: boolean;
+  tca_utc?: string;
+  d_min_km?: number;
+  v_rel_km_s?: number;
+  position_sat1_km?: number[];
+  position_sat2_km?: number[];
+  tle_age_days_sat1?: number;
+  tle_age_days_sat2?: number;
+  risk?: Record<string, unknown>;
+  coarse_samples?: number;
+  window_hours?: number;
+  error?: string;
+}
+
+export interface OrbitalAnalyzeResponse {
+  propagated_state: PropagatedState;
+  conjunction?: ConjunctionResult;
+  analysis_type: string;
+}
+
+export type OrbitalResult =
+  | { ok: true; data: OrbitalAnalyzeResponse }
+  | { ok: false; status: number; message: string };
+
+/** Derived type used in the Threat Center list. */
+export interface ThreatEntry {
+  id: string;                        // human label (e.g. "Object A")
+  result: OrbitalAnalyzeResponse;
+  risk_category?: string;            // from conjunction.risk.risk_category
+  risk_score?: number;
+  d_min_km?: number;
+  tle_age_days?: number;
+}
+
+/** Maps risk category to Tailwind text colour class. */
+export const RISK_COLOR: Record<string, string> = {
+  CRITICAL: "text-red-400",
+  HIGH:     "text-orange-400",
+  MEDIUM:   "text-yellow-400",
+  LOW:      "text-green-400",
+};
+
+/** Maps risk category to emoji indicator. */
+export const RISK_EMOJI: Record<string, string> = {
+  CRITICAL: "🔴",
+  HIGH:     "🟠",
+  MEDIUM:   "🟡",
+  LOW:      "🟢",
+};
