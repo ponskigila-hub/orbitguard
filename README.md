@@ -380,6 +380,15 @@ OGB computed result agrees to:
 
 Verified by `tests/unit/test_orbital_service.py` (12 tests, all pass).
 
+### V2 End-to-End Verification
+
+The full V2 pipeline was manually verified end-to-end:
+
+- **SGP4 propagation** — tested against a real ISS TLE; computed altitude (~420 km) and velocity (~7.67 km/s) matched published ISS orbital parameters (413–422 km altitude, 7.67 km/s orbital speed) to within expected precision.
+- **Conjunction analysis** — tested with ISS + Tiangong TLEs; returned TCA, d_min ≈ 8190 km, v_rel ≈ 10.3 km/s, and a LOW risk score (~0.000001) — manually cross-checked against the locked risk formula and confirmed mathematically consistent.
+- **Copilot `propagate_tle` tool** — confirmed working via live test: given a real TLE in chat, Copilot correctly invoked the tool (visible tool-call indicator) and returned SGP4-derived position/velocity matching manual verification.
+- **Full test suite** — 64/64 tests passing as of this verification.
+
 ### UI: Orbital Intelligence Page
 
 Navigate to `/orbital` (link in the top navigation bar). Features:
