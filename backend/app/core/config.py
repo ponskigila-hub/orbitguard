@@ -67,5 +67,5 @@ MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 # AI Copilot
 # ---------------------------------------------------------------------------
 COPILOT_PROVIDER = "gemini"          # swap here to change provider globally
-COPILOT_MODEL = "gemini-2.0-flash"
+COPILOT_MODEL = "gemini-3.5-flash"
 COPILOT_MAX_TOKENS = 1024

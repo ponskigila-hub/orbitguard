@@ -5,6 +5,8 @@ FastAPI application entry point.
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+load_dotenv()
 
 from app.core.config import API_V1_PREFIX, APP_TITLE, APP_VERSION
 from app.api.v1 import api_router
