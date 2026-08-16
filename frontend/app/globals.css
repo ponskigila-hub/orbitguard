@@ -107,3 +107,19 @@ body {
 .ogb-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #4a5568;
 }
+
+/* ── ogb-skeleton: shimmer animation for skeleton loaders ────────────────── */
+@keyframes ogb-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.ogb-skeleton {
+  background: linear-gradient(
+    90deg,
+    #161b27 25%,
+    #1e2535 50%,
+    #161b27 75%
+  );
+  background-size: 200% 100%;
+  animation: ogb-shimmer 1.6s ease-in-out infinite;
+}

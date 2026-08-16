@@ -12,12 +12,21 @@ export interface CopilotMessage {
   content: string;
 }
 
+/** Compact summary of a past detection for session-history context. */
+export interface DetectionHistorySummary {
+  class_name: string;
+  confidence: number;
+  timestamp: string; // ISO string
+}
+
 export interface CopilotRequest {
   message: string;
   history?: CopilotMessage[];
   detection_context?: DetectionResponse;
   orbital_context?: Record<string, unknown>; // V2+
   risk_context?: Record<string, unknown>;    // V2+
+  /** Compact list of prior detections this session (not full raw data). */
+  session_history?: DetectionHistorySummary[];
 }
 
 export interface ToolCallRecord {
@@ -76,6 +85,18 @@ export interface ApiError {
 export type DetectResult =
   | { ok: true; data: DetectionResponse }
   | { ok: false; status: number; message: string };
+
+// ---------------------------------------------------------------------------
+// Session history entry (in-memory only, not persisted)
+// ---------------------------------------------------------------------------
+
+export interface DetectionHistoryEntry {
+  id: string;            // uuid-style unique id
+  timestamp: string;     // ISO string
+  imageSrc: string;      // object URL
+  naturalSize: { w: number; h: number };
+  result: DetectionResponse;
+}
 
 // ---------------------------------------------------------------------------
 // Orbital Intelligence (V2)

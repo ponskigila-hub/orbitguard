@@ -14,10 +14,11 @@ import { useState, useRef, useEffect, KeyboardEvent } from "react";
 import { Bot, Send, AlertTriangle, Loader } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { copilotChat } from "@/lib/api";
-import type { CopilotMessage, DetectionResponse, ToolCallRecord } from "@/lib/types";
+import type { CopilotMessage, DetectionResponse, DetectionHistoryEntry, ToolCallRecord } from "@/lib/types";
 
 interface Props {
   detectionContext: DetectionResponse | null;
+  detectionHistory?: DetectionHistoryEntry[];
 }
 
 interface DisplayMessage {
@@ -48,7 +49,13 @@ const SUGGESTED_POST: string[] = [
   "Tell me about this object class.",
 ];
 
-export default function CopilotPanel({ detectionContext }: Props) {
+/** Extra chips shown when session history is available. */
+const SUGGESTED_HISTORY: string[] = [
+  "Compare this to the previous detection.",
+  "How many debris have I found this session?",
+];
+
+export default function CopilotPanel({ detectionContext, detectionHistory = [] }: Props) {
   const [messages, setMessages] = useState<DisplayMessage[]>([WELCOME]);
   const [history, setHistory] = useState<CopilotMessage[]>([]);
   const [input, setInput] = useState("");
@@ -104,12 +111,23 @@ export default function CopilotPanel({ detectionContext }: Props) {
     setInput("");
     setLoading(true);
 
+    // Build compact session history: all entries except the current one
+    const sessionHistorySummaries = detectionHistory
+      .filter((entry) => entry.result !== detectionContext)
+      .flatMap((entry) =>
+        entry.result.detections.map((d) => ({
+          class_name: d.class_name,
+          confidence: d.confidence,
+          timestamp: entry.timestamp,
+        }))
+      );
+
     const result = await copilotChat({
       message: text,
       history,
       detection_context: detectionContext ?? undefined,
       // orbital_context and risk_context are V2 — omit entirely in MVP
-      // (backend will see null and copilot will say "no orbital data available")
+      session_history: sessionHistorySummaries.length > 0 ? sessionHistorySummaries : undefined,
     });
 
     setLoading(false);
@@ -213,6 +231,23 @@ export default function CopilotPanel({ detectionContext }: Props) {
               {q}
             </button>
           ))}
+          {/* Show history chips only when there are prior detections */}
+          {detectionHistory.length > 1 &&
+            SUGGESTED_HISTORY.map((q) => (
+              <button
+                key={q}
+                onClick={() => useChip(q)}
+                disabled={loading || chipsUsed.has(q)}
+                className={[
+                  "px-2 py-1 rounded text-[10px] font-mono border transition-colors",
+                  loading || chipsUsed.has(q)
+                    ? "border-[#1e2535] text-[#2d3748] cursor-not-allowed"
+                    : "border-[#1a4a2a] text-[#4ade80] hover:bg-[#0a1a0d] hover:text-[#86efac] cursor-pointer",
+                ].join(" ")}
+              >
+                {q}
+              </button>
+            ))}
         </div>
         <div className="flex gap-2 items-end">
           <textarea

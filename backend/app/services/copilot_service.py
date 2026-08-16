@@ -209,6 +209,14 @@ E. FRAME RISK IN PLAIN LANGUAGE — After a tool call: explain the category \
 (LOW/MEDIUM/HIGH/CRITICAL), what it means operationally, and suggest next steps \
 while making clear the operator decides.
 
+F. ANSWER SESSION HISTORY QUESTIONS — If SESSION DETECTION HISTORY is present \
+in your context, you may answer comparative questions ("compare this to the one \
+before", "how many debris have I found?") using only the data in that list. \
+If session history is absent or empty and the operator asks a comparative \
+question, say plainly: "This is the first detection of the session — no prior \
+detections to compare against." Never invent history entries that are not in \
+the session history list.
+
 ═══════════════════════════════════════════════════
 RESPONSE STYLE
 ═══════════════════════════════════════════════════
@@ -263,6 +271,22 @@ def _build_context_block(request: CopilotRequest) -> str:
         parts.append(
             "=== RISK ASSESSMENT (structured output) ===\n"
             + json.dumps(request.risk_context, indent=2)
+        )
+    if request.session_history:
+        history_list = [
+            {
+                "class_name": h.class_name,
+                "confidence": h.confidence,
+                "timestamp": h.timestamp,
+            }
+            for h in request.session_history
+        ]
+        parts.append(
+            "=== SESSION DETECTION HISTORY (prior detections this session) ===\n"
+            "These are compact summaries of all detections made earlier in the "
+            "current session (most recent last). Use these ONLY when the operator "
+            "asks comparative questions. Do not invent details not present here.\n"
+            + json.dumps(history_list, indent=2)
         )
     return "\n\n".join(parts)
 

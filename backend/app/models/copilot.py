@@ -13,6 +13,13 @@ class CopilotMessage(BaseModel):
     content: str
 
 
+class DetectionHistorySummary(BaseModel):
+    """Compact summary of a past detection for session history context."""
+    class_name: str
+    confidence: float
+    timestamp: str
+
+
 class CopilotRequest(BaseModel):
     """
     Operator sends a question plus structured context (detection JSON,
@@ -21,9 +28,10 @@ class CopilotRequest(BaseModel):
     """
     message: str
     history: List[CopilotMessage] = []
-    detection_context: Optional[dict] = None   # DetectionResponse dict
-    orbital_context: Optional[dict] = None     # OrbitalState dict (V2+)
-    risk_context: Optional[dict] = None        # RiskAssessment dict (V2+)
+    detection_context: Optional[dict] = None    # DetectionResponse dict
+    orbital_context: Optional[dict] = None      # OrbitalState dict (V2+)
+    risk_context: Optional[dict] = None         # RiskAssessment dict (V2+)
+    session_history: List[DetectionHistorySummary] = []  # compact prior detections
 
 
 class ToolCallRecord(BaseModel):

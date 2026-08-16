@@ -2,6 +2,12 @@
  * OGB — OrbitalGuard
  * MVP screen — Camera Analysis + AI Copilot side-by-side.
  *
+ * Features:
+ *  - Session detection history (in-memory, feature #1)
+ *  - Skeleton loader + bbox animation (feature #2)
+ *  - Confidence threshold slider (feature #3)
+ *  - Export detection report: JSON + PDF (feature #4)
+ *
  * Layout:
  *  ┌────────────────────────────────┬──────────────────┐
  *  │  Camera Analysis               │  AI Copilot      │
@@ -10,7 +16,7 @@
  */
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Shield, RefreshCw, Satellite } from "lucide-react";
 import BoundingBoxCanvas from "@/components/BoundingBoxCanvas";
@@ -18,8 +24,12 @@ import DetectionSummary from "@/components/DetectionSummary";
 import DropZone from "@/components/DropZone";
 import StatusBar, { Status } from "@/components/StatusBar";
 import CopilotPanel from "@/components/CopilotPanel";
+import ExportButton from "@/components/ExportButton";
 import { detectObjects } from "@/lib/api";
-import type { DetectionResponse } from "@/lib/types";
+import type { DetectionResponse, DetectionHistoryEntry } from "@/lib/types";
+
+/** Simple incrementing ID for history entries. */
+let _historySeq = 0;
 
 export default function MvpPage() {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -27,19 +37,23 @@ export default function MvpPage() {
   const [result, setResult] = useState<DetectionResponse | null>(null);
   const [status, setStatus] = useState<Status>({ type: "idle" });
 
+  // Feature #1 — session detection history (in-memory, cleared on page reload)
+  const [detectionHistory, setDetectionHistory] = useState<DetectionHistoryEntry[]>([]);
+
+  // Feature #3 — confidence threshold slider
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.25);
+
   const handleFile = useCallback(async (file: File) => {
     const objectUrl = URL.createObjectURL(file);
 
     const img = new window.Image();
     img.src = objectUrl;
-    await new Promise<void>((resolve) => {
-      img.onload = () => {
-        setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
-        resolve();
-      };
+    const nSize = await new Promise<{ w: number; h: number }>((resolve) => {
+      img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
     });
 
     setImageSrc(objectUrl);
+    setNaturalSize(nSize);
     setResult(null);
     setStatus({ type: "loading" });
 
@@ -52,6 +66,18 @@ export default function MvpPage() {
         type: "success",
         message: `${n} object${n !== 1 ? "s" : ""} detected · ${res.data.inference_latency_ms?.toFixed(0) ?? "—"} ms`,
       });
+      // Feature #1 — append to session history
+      _historySeq += 1;
+      setDetectionHistory((prev) => [
+        ...prev,
+        {
+          id: `det-${_historySeq}`,
+          timestamp: new Date().toISOString(),
+          imageSrc: objectUrl,
+          naturalSize: nSize,
+          result: res.data,
+        },
+      ]);
     } else {
       setStatus({ type: "error", message: res.message });
     }
@@ -62,7 +88,25 @@ export default function MvpPage() {
     setResult(null);
     setStatus({ type: "idle" });
     setNaturalSize({ w: 0, h: 0 });
+    // Note: detectionHistory is intentionally NOT cleared on reset —
+    // it is session memory, only cleared on full page reload.
   }
+
+  /** Load a history entry back as the current context. */
+  function loadHistoryEntry(entry: DetectionHistoryEntry) {
+    setImageSrc(entry.imageSrc);
+    setNaturalSize(entry.naturalSize);
+    setResult(entry.result);
+    setStatus({
+      type: "success",
+      message: `History: ${entry.result.detection_count} object${entry.result.detection_count !== 1 ? "s" : ""} · ${new Date(entry.timestamp).toLocaleTimeString()}`,
+    });
+  }
+
+  // Filtered detections based on confidence threshold slider
+  const filteredDetections = result
+    ? result.detections.filter((d) => d.confidence >= confidenceThreshold)
+    : [];
 
   return (
     <div className="min-h-screen bg-[#060d18] text-[#e2e8f0] flex flex-col">
@@ -124,17 +168,30 @@ export default function MvpPage() {
               <StatusBar status={status} />
             )}
 
+            {/* Feature #1 — Session history strip */}
+            {detectionHistory.length > 0 && (
+              <SessionHistoryStrip
+                history={detectionHistory}
+                currentImageSrc={imageSrc}
+                onSelect={loadHistoryEntry}
+              />
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
               {/* Image + bbox overlay */}
               <div className="flex flex-col gap-3">
-                {imageSrc ? (
+                {status.type === "loading" && !imageSrc ? (
+                  /* Feature #2 — Skeleton loader (no image yet, loading state) */
+                  <SkeletonLoader />
+                ) : imageSrc ? (
                   <>
                     <div className="relative">
                       <BoundingBoxCanvas
                         imageSrc={imageSrc}
-                        detections={result?.detections ?? []}
+                        detections={filteredDetections}
                         naturalWidth={naturalSize.w || result?.image_width || 640}
                         naturalHeight={naturalSize.h || result?.image_height || 640}
+                        animate={status.type === "success"}
                       />
                       {status.type === "loading" && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded">
@@ -184,11 +241,32 @@ export default function MvpPage() {
                   </div>
                 </div>
 
+                {/* Feature #3 — Confidence threshold slider */}
+                {result && (
+                  <ConfidenceSlider
+                    value={confidenceThreshold}
+                    onChange={setConfidenceThreshold}
+                    totalDetections={result.detections.length}
+                    filteredCount={filteredDetections.length}
+                    backendThreshold={0.25}
+                  />
+                )}
+
                 {result && (
                   <DetectionSummary
-                    detections={result.detections}
+                    detections={filteredDetections}
                     latencyMs={result.inference_latency_ms}
                     modelVersion={result.model_version}
+                  />
+                )}
+
+                {/* Feature #4 — Export buttons */}
+                {result && (
+                  <ExportButton
+                    result={result}
+                    filteredDetections={filteredDetections}
+                    imageSrc={imageSrc}
+                    detectionHistory={detectionHistory}
                   />
                 )}
 
@@ -201,6 +279,19 @@ export default function MvpPage() {
                       {JSON.stringify(result, null, 2)}
                     </pre>
                   </details>
+                )}
+
+                {/* Empty state — no result yet, image not uploading */}
+                {!result && status.type === "idle" && (
+                  <div className="rounded border border-[#2d3748] bg-[#0d1117] px-4 py-8 flex flex-col items-center gap-2 text-center">
+                    <span className="text-[#2d3748] text-2xl">📡</span>
+                    <p className="text-[#4a5568] text-xs font-mono">
+                      No detection loaded
+                    </p>
+                    <p className="text-[#2d3748] text-xs font-mono">
+                      Upload an image to run analysis
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
@@ -219,7 +310,10 @@ export default function MvpPage() {
               </p>
             </div>
             <div className="flex-1 min-h-0">
-              <CopilotPanel detectionContext={result} />
+              <CopilotPanel
+                detectionContext={result}
+                detectionHistory={detectionHistory}
+              />
             </div>
           </div>
 
@@ -240,6 +334,152 @@ export default function MvpPage() {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Feature #1 — Session history strip
+// ---------------------------------------------------------------------------
+
+interface SessionHistoryStripProps {
+  history: DetectionHistoryEntry[];
+  currentImageSrc: string | null;
+  onSelect: (entry: DetectionHistoryEntry) => void;
+}
+
+function SessionHistoryStrip({ history, currentImageSrc, onSelect }: SessionHistoryStripProps) {
+  return (
+    <div className="rounded border border-[#2d3748] bg-[#0d1117] overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#161b27] border-b border-[#2d3748]">
+        <span className="text-[#4a5568] text-[10px] font-mono uppercase tracking-widest">
+          Session History
+        </span>
+        <span className="text-[#4a5568] text-[10px] font-mono">
+          {history.length} detection{history.length !== 1 ? "s" : ""} this session
+        </span>
+      </div>
+      <div className="flex items-center gap-2 px-3 py-2 overflow-x-auto ogb-scrollbar">
+        {history.map((entry, idx) => {
+          const isActive = entry.imageSrc === currentImageSrc;
+          const topClass = entry.result.detections[0]?.class_name ?? "—";
+          const topConf = entry.result.detections[0]
+            ? `${(entry.result.detections[0].confidence * 100).toFixed(0)}%`
+            : "";
+          const time = new Date(entry.timestamp).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+          return (
+            <button
+              key={entry.id}
+              onClick={() => onSelect(entry)}
+              title={`#${idx + 1} · ${entry.result.detection_count} objects · ${time}`}
+              className={[
+                "flex-shrink-0 flex flex-col items-center gap-1 px-2 py-1.5 rounded border text-[10px] font-mono transition-colors",
+                isActive
+                  ? "border-[#3b82f6] bg-[#1a2847] text-[#7aa2d4]"
+                  : "border-[#2d3748] bg-[#0f1624] text-[#4a5568] hover:border-[#3b82f6] hover:text-[#a0aec0]",
+              ].join(" ")}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={entry.imageSrc}
+                alt={`Detection ${idx + 1}`}
+                className="w-12 h-10 object-cover rounded"
+              />
+              <span className="text-[#a0aec0]">#{idx + 1}</span>
+              <span className="truncate max-w-[52px]">{topClass}</span>
+              {topConf && <span>{topConf}</span>}
+              <span className="text-[#2d3748]">{time}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Feature #2 — Skeleton loader
+// ---------------------------------------------------------------------------
+
+function SkeletonLoader() {
+  return (
+    <div className="flex flex-col gap-3 animate-pulse" aria-label="Loading detection...">
+      {/* Image area skeleton */}
+      <div className="w-full rounded border border-[#2d3748] bg-[#0d1117] overflow-hidden">
+        <div
+          className="w-full bg-[#161b27] ogb-skeleton"
+          style={{ paddingTop: "62.5%" }} // 16:10 aspect ratio placeholder
+        />
+      </div>
+      {/* Status skeleton */}
+      <div className="flex items-center gap-3">
+        <div className="h-3 w-32 rounded bg-[#1e2535] ogb-skeleton" />
+        <div className="h-3 w-16 rounded bg-[#1e2535] ogb-skeleton" />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Feature #3 — Confidence threshold slider
+// ---------------------------------------------------------------------------
+
+interface ConfidenceSliderProps {
+  value: number;
+  onChange: (v: number) => void;
+  totalDetections: number;
+  filteredCount: number;
+  backendThreshold: number;
+}
+
+function ConfidenceSlider({
+  value,
+  onChange,
+  totalDetections,
+  filteredCount,
+  backendThreshold,
+}: ConfidenceSliderProps) {
+  return (
+    <div className="rounded border border-[#2d3748] bg-[#0d1117] px-4 py-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[#4a5568] text-xs font-mono uppercase tracking-widest">
+          Confidence Filter
+        </span>
+        <span className="text-[#3b82f6] text-xs font-mono font-bold">
+          ≥ {(value * 100).toFixed(0)}%
+        </span>
+      </div>
+      <input
+        type="range"
+        min={backendThreshold}
+        max={1.0}
+        step={0.01}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-[#2d3748] accent-[#3b82f6]"
+        aria-label="Confidence threshold"
+      />
+      <div className="flex items-center justify-between text-[10px] font-mono">
+        <span className="text-[#4a5568]">
+          Backend floor: {(backendThreshold * 100).toFixed(0)}%
+        </span>
+        <span className="text-[#a0aec0]">
+          Showing {filteredCount} / {totalDetections} detection{totalDetections !== 1 ? "s" : ""}
+        </span>
+      </div>
+      {value < backendThreshold && (
+        <p className="text-[#f59e0b] text-[10px] font-mono">
+          ⚠ Slider floor limited to backend minimum ({(backendThreshold * 100).toFixed(0)}%) — detections below that were not returned.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-component: InfoRow
+// ---------------------------------------------------------------------------
 
 function InfoRow({
   label,

@@ -4,6 +4,9 @@
  *
  * Uses a <canvas> overlaid on top of the <img> at the same rendered size.
  * Boxes are drawn in the detected class colour with label + confidence.
+ *
+ * Feature #2: When `animate` flips to true (results arrive), bounding boxes
+ * fade in over 200 ms using a CSS opacity transition on the canvas element.
  */
 "use client";
 
@@ -34,6 +37,8 @@ interface Props {
   detections: Detection[];
   naturalWidth: number;
   naturalHeight: number;
+  /** When true, the canvas fades in — triggered when results first arrive. */
+  animate?: boolean;
 }
 
 export default function BoundingBoxCanvas({
@@ -41,9 +46,12 @@ export default function BoundingBoxCanvas({
   detections,
   naturalWidth,
   naturalHeight,
+  animate = false,
 }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Track previous animate value to detect transitions false→true
+  const prevAnimateRef = useRef(false);
 
   /** Re-draw boxes whenever detections or image dimensions change. */
   useEffect(() => {
@@ -90,6 +98,20 @@ export default function BoundingBoxCanvas({
         ctx.fillStyle = "#000000";
         ctx.fillText(label, x1 + 4, labelY);
       }
+
+      // Feature #2 — fade-in animation when results first arrive
+      const wasAnimating = prevAnimateRef.current;
+      prevAnimateRef.current = animate;
+      if (animate && !wasAnimating) {
+        // Trigger fade-in by briefly resetting opacity and letting the CSS
+        // transition carry it back to 1.
+        canvas.style.transition = "none";
+        canvas.style.opacity = "0";
+        // Force reflow so the browser picks up the opacity: 0 before transitioning
+        void canvas.offsetHeight;
+        canvas.style.transition = "opacity 200ms ease-in";
+        canvas.style.opacity = "1";
+      }
     };
 
     if (img.complete) {
@@ -101,7 +123,7 @@ export default function BoundingBoxCanvas({
     // Redraw on window resize
     window.addEventListener("resize", draw);
     return () => window.removeEventListener("resize", draw);
-  }, [imageSrc, detections, naturalWidth, naturalHeight]);
+  }, [imageSrc, detections, naturalWidth, naturalHeight, animate]);
 
   return (
     <div className="relative w-full">
