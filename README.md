@@ -1,6 +1,6 @@
 # OrbitalGuard (OGB)
 
-> **IBM Bob AI Builders Challenge — August 2025 | Theme: Advance Space Exploration with AI**
+> **IBM Bob AI Builders Challenge — August 2026 | Theme: Advance Space Exploration with AI**
 
 OrbitalGuard (OGB) is a JARVIS-inspired decision-support system for space operators. It analyses spacecraft-camera imagery for potential debris and known spacecraft, combines that with orbital data when available, calculates close-approach risk deterministically, and uses an AI copilot to explain the situation — the human operator remains in control of all decisions.
 
@@ -556,4 +556,4 @@ The dataset has its own independent licence that applies regardless of the proje
 - **Model framework:** [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) — AGPL-3.0
 - **Orbital propagation:** [python-sgp4](https://github.com/brandon-rhodes/python-sgp4) — MIT
 - **PDF export:** [jsPDF](https://github.com/parallax/jsPDF) — MIT
-- **Submission:** IBM Bob AI Builders Challenge, August 2025
+- **Submission:** IBM Bob AI Builders Challenge, August 2026
