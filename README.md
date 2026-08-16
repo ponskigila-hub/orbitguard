@@ -23,9 +23,10 @@ OrbitalGuard (OGB) is a JARVIS-inspired decision-support system for space operat
 7. [Orbital Intelligence (V2)](#orbital-intelligence-v2)
 8. [Risk Engine](#risk-engine)
 9. [AI Copilot](#ai-copilot)
-10. [How IBM Bob Was Used](#how-ibm-bob-was-used)
-11. [Limitations](#limitations)
-12. [License & Credits](#license--credits)
+10. [Session Features](#session-features)
+11. [How IBM Bob Was Used](#how-ibm-bob-was-used)
+12. [Limitations](#limitations)
+13. [License & Credits](#license--credits)
 
 ---
 
@@ -231,7 +232,7 @@ cp .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
-Backend is now running at **http://localhost:8000**  
+Backend is now running at **http://localhost:8000**
 Interactive API docs: **http://localhost:8000/docs**
 
 ### 4 — Frontend
@@ -432,6 +433,32 @@ Thresholds are configurable in [`backend/app/core/config.py`](backend/app/core/c
 - If a field is null or absent from the context, it says so explicitly
 - Explains detections, summarises threats, prioritises information
 - Always makes clear that the human operator makes all decisions
+- Function-calling tools (`calculate_risk_score`, `propagate_tle`) let the Copilot report real calculated values in conversation — the LLM never computes orbital mechanics or risk math itself; it always calls the same tested backend functions used elsewhere in the app
+
+---
+
+## Session Features
+
+### Detection History & Session Memory
+
+Each Camera Analysis session keeps an in-memory (not persisted — no database, per the locked architecture) history of prior detections, shown as a thumbnail strip above the camera feed. The AI Copilot receives a compact summary of this history alongside the current detection, so it can answer comparative questions such as "compare this to the previous detection" or "how many debris have I found this session?" — grounded only in what actually happened in the session, never inventing prior detections that don't exist. Suggested-question chips adapt once session history is available.
+
+### Confidence Threshold Filter
+
+A client-side confidence slider on the Camera Analysis panel lets the operator filter which returned detections are displayed, down to the backend's own minimum confidence floor (25%). Filtering happens instantly against the already-returned detection set — no extra backend call per slider movement — with the bounding boxes, detection count, and summary panel updating live.
+
+### Polished Loading & Transition States
+
+- Skeleton loading placeholders (Camera Analysis and Orbital Intelligence pages) matching the eventual layout, replacing a bare spinner/blank state during upload and inference.
+- Bounding boxes fade in over a 200 ms CSS opacity transition when a new detection result arrives, rather than appearing instantly.
+
+### Export Detection Report
+
+An "Export detection report" button on the Camera Analysis panel produces:
+- **JSON export** — the full structured detection response, plus the session history summary
+- **PDF export** — a client-side generated (via [jsPDF](https://github.com/parallax/jsPDF)) one-page report: image thumbnail, detection list with class/confidence, session history summary, and the standard decision-support safety disclaimer
+
+Both exports run entirely client-side — no backend PDF service was added, keeping the "no database, free-first" architecture intact.
 
 ---
 
@@ -445,10 +472,12 @@ Bob generated the full repository skeleton from a spec document: `backend/`, `fr
 ### Backend — FastAPI application
 Bob authored the complete FastAPI backend from scratch:
 - [`backend/app/main.py`](backend/app/main.py) — application factory, CORS middleware wired to `ALLOWED_ORIGINS` config, router registration
-- [`backend/app/api/v1/`](backend/app/api/v1/) — all three routers: `detect.py` (multipart image upload → YOLOv8 inference → structured response), `copilot.py` (message + optional JSON context → Gemini → response), `health.py` (liveness probe)
-- [`backend/app/models/`](backend/app/models/) — Pydantic schemas: `DetectionResponse`, `BoundingBox`, `Detection`, `CopilotRequest`, `CopilotResponse`
-- [`backend/app/services/detection_service.py`](backend/app/services/detection_service.py) — YOLOv8n model loading, image decode from bytes, inference, pixel-coordinate conversion, inference latency measurement
-- [`backend/app/services/copilot_service.py`](backend/app/services/copilot_service.py) — Gemini API client, system-prompt injection (safety framing), structured context serialisation
+- [`backend/app/api/v1/`](backend/app/api/v1/) — all routers: `detect.py` (multipart image upload → YOLOv8 inference → structured response), `copilot.py` (message + optional JSON context → Gemini → response, now with function-calling tools), `health.py` (liveness probe), `orbital.py` (TLE propagation + conjunction analysis)
+- [`backend/app/models/`](backend/app/models/) — Pydantic schemas: `DetectionResponse`, `BoundingBox`, `Detection`, `CopilotRequest`, `CopilotResponse`, `OrbitalAnalyzeRequest`, `PropagatedState`, `ConjunctionResult`, `OrbitalAnalyzeResponse`
+- [`backend/app/services/detection_service.py`](backend/app/services/detection_service.py) — YOLOv8n model loading, image decode from bytes, inference, pixel-coordinate conversion, inference latency measurement, enriched Copilot context (frame position, per-class mAP advisory, spatial relationships)
+- [`backend/app/services/copilot_service.py`](backend/app/services/copilot_service.py) — Gemini API client, system-prompt injection (safety framing), structured context serialisation, function-calling tool execution
+- [`backend/app/services/orbital_service.py`](backend/app/services/orbital_service.py) — SGP4 TLE propagation (`sgp4.api.Satrec` + `jday`), TLE validation
+- [`backend/app/services/conjunction_service.py`](backend/app/services/conjunction_service.py) — coarse + fine phase close-approach analysis, TCA/d_min/v_rel calculation, risk engine integration
 
 ### Configuration & risk engine
 Bob designed [`backend/app/core/config.py`](backend/app/core/config.py) with all risk thresholds, class names, model paths, and CORS defaults centralised and documented with units. The risk score formula, threshold boundaries, and `exp(−Δt/7)` TLE decay term were all written by Bob with explicit rationale comments.
@@ -457,22 +486,27 @@ Bob designed [`backend/app/core/config.py`](backend/app/core/config.py) with all
 Bob wrote [`ml/training/train.py`](ml/training/train.py) with: pre-training dataset sanity check (class count vs `data.yaml`), locked hyperparameters matching the spec, conservative augmentation rationale (flips disabled because the Roboflow export already applied them), and auto-copy of `best.pt` to `ml/weights/`. Bob also generated the full [`ml/training/ogb_train_colab.ipynb`](ml/training/ogb_train_colab.ipynb) notebook: dataset download, sanity check, train, per-class evaluation, CPU latency benchmark, and Google Drive export cells.
 
 ### Test suite
-Bob authored the complete test suite:
+Bob authored the complete test suite (64 tests total):
 - [`tests/unit/test_risk_engine.py`](tests/unit/test_risk_engine.py) — 12 tests covering formula correctness at known inputs, unit consistency (km/s), zero/near-zero separation clamping, stale TLE exponential decay, and all four risk-category boundary conditions
 - [`tests/unit/test_detection_service.py`](tests/unit/test_detection_service.py) — 6 service-layer unit tests including summary generation and missing-weights error handling
 - [`tests/integration/test_api.py`](tests/integration/test_api.py) — 8 integration tests covering health endpoint, detect happy path, wrong content-type, empty file upload, service error passthrough, and copilot endpoint with and without detection context
+- [`tests/unit/test_orbital_service.py`](tests/unit/test_orbital_service.py) — 12 tests validating SGP4 propagation against the Vallado 2006 reference vector and TLE input validation
+- [`tests/unit/test_conjunction_service.py`](tests/unit/test_conjunction_service.py) — 9 tests covering close-approach edge cases (identical TLEs, stale TLE, no convergence, normal crossing orbits)
+- [`tests/unit/test_tool_calling.py`](tests/unit/test_tool_calling.py) — tests confirming the Copilot's function-calling tools (`calculate_risk_score`, `propagate_tle`) invoke the real backend math rather than LLM-generated numbers
 
 ### Frontend — Next.js panels
-Bob scaffolded and implemented both active UI panels:
-- **Camera Analysis panel** — image upload with drag-and-drop, POST to `/api/v1/detect`, bounding-box SVG overlay rendered at correct pixel coordinates, per-detection confidence badges, inference latency display
-- **AI Copilot panel** — chat interface, detection context attachment toggle, streaming-style response display, safety disclaimer footer
+Bob scaffolded and implemented all active UI panels:
+- **Camera Analysis panel** — image upload with drag-and-drop, POST to `/api/v1/detect`, bounding-box SVG overlay rendered at correct pixel coordinates with a 200 ms fade-in transition, per-detection confidence badges, inference latency display, confidence threshold slider, session history thumbnail strip, and export report button
+- **AI Copilot panel** — chat interface with internal scroll (fixed-height, auto-scroll to newest message), markdown rendering, detection context attachment, session history awareness, suggested-question chips, function-calling tool-call indicators, and safety disclaimer footer
+- **Orbital Intelligence panel** (`/orbital`) — TLE analysis form, Threat Center list, Threat Details panel
 
 ### Debugging sessions
 Several non-trivial bugs required Bob to diagnose and fix:
 - **`httpx` / Starlette `TestClient` conflict** — integration tests failed because `httpx` 0.28+ changed how it passes `files=` to `TestClient.post`. Bob resolved this by using `fastapi.testclient.TestClient` directly (FastAPI 0.111+ ships its own bundled client) rather than pinning `httpx`.
-- **NumPy `bool` deprecation** — `np.bool` removed in NumPy 1.24; Bob replaced all occurrences with `bool` in the detection service and risk engine.
-- **`matplotlib` backend on headless CI** — `plt.show()` calls in the evaluation notebook raised `_tkinter` import errors; Bob added `matplotlib.use('Agg')` at the top of each relevant cell.
+- **NumPy 2.x / matplotlib ABI mismatch** — a shared local Python environment had NumPy 2.x installed alongside a matplotlib build compiled against NumPy 1.x, crashing at import time. Resolved by using a dedicated virtual environment for this project rather than a shared course environment.
 - **CORS preflight rejection** — frontend `OPTIONS` requests were rejected because `ALLOWED_ORIGINS` defaulted to an empty string rather than `None`; Bob fixed the guard in `config.py` and added a regression test.
+- **Copilot markdown rendering & tone consistency** — raw markdown syntax (`**bold**`) was displaying literally in the chat UI; fixed with `react-markdown`. A follow-up pass caught that the more conversational tone update had only been applied to some response categories, not all — fixed by consolidating to a single system-prompt tone instruction applied uniformly.
+- **Fabricated evaluation numbers (caught and corrected)** — at one point, evaluation metrics in the README were reported from a stale/incorrect source (an interrupted 9-epoch local CPU run) rather than the completed 50-epoch Colab GPU run. This was caught by independently verifying the weights file via `smoke_test.py` (the `cheops` class output is impossible from base pretrained YOLOv8n, proving the weights were correctly fine-tuned) and cross-checking file sizes, then correcting the README with the verified numbers and adding an explicit `metrics.json` provenance note to prevent recurrence.
 
 ### Documentation & safety framing
 Bob wrote this README and enforced consistent safety framing: every system prompt, API docstring, and code comment frames OGB as decision-support only. The phrase "human operator makes all decisions" appears in the system prompt, the API reference, the Copilot service, and this README — not as boilerplate but as a deliberate, checked invariant.
@@ -481,7 +515,7 @@ Bob wrote this README and enforced consistent safety framing: every system promp
 
 ## Limitations
 
-The following are honest statements of what OGB does **not** do in its current MVP state. These are known gaps, not oversights.
+The following are honest statements of what OGB does **not** do in its current state. These are known gaps, not oversights.
 
 ### Deployment
 - **No public deployment exists.** The submission demo is delivered via local run and recorded video. Render/Vercel configuration files (`render.yaml`, `frontend/vercel.json`) are present in the repo but the services are not deployed. Any `https://ogb-backend.onrender.com` or `https://ogb.vercel.app` URL references in config comments are placeholders.
@@ -501,13 +535,14 @@ The following are honest statements of what OGB does **not** do in its current M
 - **CesiumJS (V2.5):** Not implemented. Skipped per project scope — a working Threat Center without 3D visuals beats a broken one with them.
 
 ### Dataset & evaluation
-- Test set is small: **123 images**. Per-class performance varies significantly at full training; the weakest classes in a representative run would be expected around `soho` and `proba_3_csc` based on their lower representation in the dataset.
+- Test set is small: **123 images**. Per-class performance varies significantly; the weakest classes (`soho`, `proba_3_csc`) have only ~10–12 images in the test split, so their mAP is sensitive to small sample variance — they are not necessarily harder objects, just underrepresented in the test set.
 - All 2,467 dataset images are committed to the repository (`data/raw/space-debris-v2/`). This keeps the repo self-contained for reproducibility but makes the initial clone large (~1 GB). Reviewers on slow connections should be aware of this.
 
 ### Other known gaps
 - The risk score is a **project priority indicator**, not a formally validated collision probability. It uses a heuristic formula and arbitrary thresholds — it should not be used for real spacecraft operations.
 - `YOLOv8n` (nano) is the smallest model variant, chosen for CPU inference speed. A larger variant (`YOLOv8s`, `YOLOv8m`) would improve accuracy at the cost of inference latency.
 - TLE data degrades over time; the risk formula penalises stale epochs via the `exp(−Δt/7)` decay term, but this is a workaround, not a rigorous uncertainty model.
+- Session history and export features are in-memory / client-side only (no database, per the locked architecture) — history does not persist across a page reload.
 
 ---
 
@@ -520,4 +555,5 @@ The dataset has its own independent licence that applies regardless of the proje
 - **Dataset:** [Space Debris v2](https://universe.roboflow.com/woah-noah/space-debris-mugw2/dataset/2) by **woah-noah** on Roboflow Universe. License: **CC BY 4.0**. Used with attribution as required by the licence terms. Any redistribution of the dataset or derivative works must retain this credit.
 - **Model framework:** [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) — AGPL-3.0
 - **Orbital propagation:** [python-sgp4](https://github.com/brandon-rhodes/python-sgp4) — MIT
+- **PDF export:** [jsPDF](https://github.com/parallax/jsPDF) — MIT
 - **Submission:** IBM Bob AI Builders Challenge, August 2025
