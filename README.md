@@ -14,19 +14,57 @@ OrbitalGuard (OGB) is a JARVIS-inspired decision-support system for space operat
 
 ## Table of Contents
 
-1. [Architecture](#architecture)
-2. [Dataset](#dataset)
-3. [Model Training](#model-training)
-4. [Evaluation Results](#evaluation-results)
-5. [Run Locally](#run-locally)
-6. [API Reference](#api-reference)
-7. [Orbital Intelligence](#orbital-intelligence-v2)
-8. [Risk Engine](#risk-engine)
-9. [AI Copilot](#ai-copilot)
-10. [Session Features](#session-features)
-11. [How IBM Bob Was Used](#how-ibm-bob-was-used)
-12. [Limitations](#limitations)
-13. [License & Credits](#license--credits)
+1. [Problem Statement](#problem-statement)
+2. [Solution Description](#solution-description)
+3. [Selected Challenge Theme](#selected-challenge-theme)
+4. [Architecture](#architecture)
+5. [Dataset](#dataset)
+6. [Model Training](#model-training)
+7. [Evaluation Results](#evaluation-results)
+8. [Run Locally](#run-locally)
+9. [API Reference](#api-reference)
+10. [Orbital Intelligence](#orbital-intelligence)
+11. [Risk Engine](#risk-engine)
+12. [AI Copilot](#ai-copilot)
+13. [Session Features](#session-features)
+14. [How IBM Bob Was Used](#how-ibm-bob-was-used)
+15. [Limitations](#limitations)
+16. [License & Credits](#license--credits)
+
+---
+
+## Problem Statement
+
+Space operators — satellite operators, small satcom companies, and space situational awareness analysts — must monitor both **visual camera feeds** and **orbital catalog data** to identify potential debris and close-approach threats. In practice, these two data sources are processed manually and separately: an operator has to eyeball a camera image for anomalies, then separately cross-reference orbital elements (TLEs) against a catalog, then manually calculate closest-approach distance and relative velocity to judge risk. This is slow, requires specialised orbital-mechanics expertise, and is error-prone precisely when speed matters most — during an active close-approach window.
+
+**How might we unify visual debris detection and orbital risk analysis into a single AI-assisted workflow, so a space operator can assess collision risk quickly and with confidence, without manually cross-referencing data sources or performing orbital calculations by hand?**
+
+---
+
+## Solution Description
+
+OGB (OrbitalGuard) is a decision-support tool that closes this gap end-to-end:
+
+1. **See** — a fine-tuned YOLOv8 model detects and classifies spacecraft/debris objects from camera imagery.
+2. **Analyse** — when orbital data (a TLE) is available, real SGP4 propagation and a two-phase close-approach search compute actual position, velocity, time of closest approach, and minimum separation — no estimation, real orbital mechanics.
+3. **Contextualise & Prioritise** — a deterministic, auditable risk formula converts those physical values into a priority score and category (LOW → CRITICAL), so operators can triage multiple objects at a glance via the Threat Center.
+4. **Explain** — an AI Copilot, grounded in the actual structured output of the vision and orbital pipelines (and able to call the same real calculation functions via tool-calling), explains what was found in plain language — explicitly declining to speculate when data isn't available, rather than guessing.
+
+At every step, **the human operator makes the final call** — OGB detects, analyses, prioritises, and explains; it never issues commands or autonomously acts on a spacecraft.
+
+---
+
+## Selected Challenge Theme
+
+**Theme: Advance Space Exploration with AI** (IBM Bob AI Builders Challenge, August 2026).
+
+OGB was built specifically around this theme's judging criteria:
+
+- **Technical Execution** — a working, tested pipeline combining computer vision (YOLOv8), real orbital mechanics (SGP4, validated against a published reference vector), a deterministic risk engine, and an LLM copilot with function-calling — not a single-model demo.
+- **Innovation** — AI is the functional core, not a wrapper: the Copilot doesn't just summarise text, it calls real backend physics/risk functions as tools and reasons over genuinely structured, multi-source (vision + orbital) context.
+- **Challenge Fit** — directly addresses a real space-operations pain point (fragmented visual/orbital situational awareness) rather than a generic AI demo retrofitted with a space theme.
+- **Feasibility** — built on free-tier-friendly, CPU-viable components (YOLOv8n, python-sgp4, SciPy) with no paid infrastructure required to run or reproduce.
+- **Real-World Impact** — session history, exportable reports (JSON/PDF), and a clear decision-support (not autonomous-control) framing reflect how a tool like this would actually need to behave in an operational context.
 
 ---
 
