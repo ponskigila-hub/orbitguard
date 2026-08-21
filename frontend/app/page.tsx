@@ -135,7 +135,7 @@ export default function MvpPage() {
               className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono bg-[#0d1117] border border-[#2d4a7a] text-[#7aa2d4] hover:bg-[#1a2847] hover:text-[#c5d8f7] transition-colors"
             >
               <Satellite size={13} strokeWidth={1.5} />
-              Orbital Intelligence (V2)
+              Orbital Intelligence
             </Link>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono bg-[#0d1117] border border-[#2d3748] text-[#4a5568]">
               <span className="w-1.5 h-1.5 rounded-full bg-[#3b82f6] animate-pulse" />
@@ -159,7 +159,7 @@ export default function MvpPage() {
               </h1>
               <p className="text-[#4a5568] text-xs font-mono mt-0.5">
                 Upload an image to run YOLOv8n debris / object detection.
-                Vision output only — orbital context requires V2 pipeline.
+                
               </p>
             </div>
 
@@ -306,7 +306,7 @@ export default function MvpPage() {
                 AI Copilot
               </h2>
               <p className="text-[#4a5568] text-xs font-mono mt-0.5">
-                Ask questions grounded in detection data. No orbital data in MVP — Copilot will say so explicitly.
+                Ask questions grounded in detection data. 
               </p>
             </div>
             <div className="flex-1 min-h-0">

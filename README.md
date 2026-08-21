@@ -20,7 +20,7 @@ OrbitalGuard (OGB) is a JARVIS-inspired decision-support system for space operat
 4. [Evaluation Results](#evaluation-results)
 5. [Run Locally](#run-locally)
 6. [API Reference](#api-reference)
-7. [Orbital Intelligence (V2)](#orbital-intelligence-v2)
+7. [Orbital Intelligence](#orbital-intelligence-v2)
 8. [Risk Engine](#risk-engine)
 9. [AI Copilot](#ai-copilot)
 10. [Session Features](#session-features)
@@ -339,7 +339,7 @@ Propagate a TLE and optionally run conjunction analysis.
 
 ---
 
-## Orbital Intelligence (V2)
+## Orbital Intelligence
 
 ### SGP4 Source
 

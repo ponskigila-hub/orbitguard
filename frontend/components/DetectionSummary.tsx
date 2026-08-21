@@ -105,7 +105,7 @@ export default function DetectionSummary({ detections, latencyMs, modelVersion }
           <div className="px-4 py-2 border-t border-[#1e2535] bg-[#0d1117]">
             <p className="text-[#4a5568] text-xs font-mono">
               ⓘ Vision output only — no distance, velocity, or collision data.
-              Orbital context requires V2 pipeline.
+              
             </p>
           </div>
         </>

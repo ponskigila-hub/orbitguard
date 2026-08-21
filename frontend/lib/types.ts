@@ -99,7 +99,7 @@ export interface DetectionHistoryEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Orbital Intelligence (V2)
+// Orbital Intelligence
 // ---------------------------------------------------------------------------
 
 export interface OrbitalAnalyzeRequest {
