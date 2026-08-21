@@ -47,8 +47,7 @@ OGB (OrbitalGuard) is a decision-support tool that closes this gap end-to-end:
 
 1. **See** — a fine-tuned YOLOv8 model detects and classifies spacecraft/debris objects from camera imagery.
 2. **Analyse** — when orbital data (a TLE) is available, real SGP4 propagation and a two-phase close-approach search compute actual position, velocity, time of closest approach, and minimum separation — no estimation, real orbital mechanics.
-3. **Contextualise & Prioritise** — a deterministic, auditable risk formula converts those physical values into a priority score and category (LOW → CRITICAL), so operators can triage multiple objects at a glance via the Threat Center.
-4. **Explain** — an AI Copilot, grounded in the actual structured output of the vision and orbital pipelines (and able to call the same real calculation functions via tool-calling), explains what was found in plain language — explicitly declining to speculate when data isn't available, rather than guessing.
+3. **Explain** — an AI Copilot, grounded in the actual structured output of the vision and orbital pipelines (and able to call the same real calculation functions via tool-calling), explains what was found in plain language — explicitly declining to speculate when data isn't available, rather than guessing.
 
 At every step, **the human operator makes the final call** — OGB detects, analyses, prioritises, and explains; it never issues commands or autonomously acts on a spacecraft.
 
